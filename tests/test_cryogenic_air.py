@@ -241,8 +241,18 @@ def test_flashing_droplet_source_rejects_unpublished_size_coefficient(
         )
 
 
+def _hecht_panda_data_or_skip():
+    try:
+        return load_hecht_panda_data()
+    except FileNotFoundError:
+        pytest.skip(
+            "external Hecht-Panda benchmark data are not redistributed; "
+            "configure the controlled local validation material to run this test"
+        )
+
+
 def test_hecht_panda_uses_final_journal_aggregate_fits():
-    data = load_hecht_panda_data()
+    data = _hecht_panda_data_or_skip()
     assert data["active_benchmark"] == "journal_2019"
     assert data["published_fits"][
         "centerline_inverse_mass_fraction_slope"
@@ -256,7 +266,7 @@ def test_hecht_panda_uses_final_journal_aggregate_fits():
 
 
 def test_hecht_panda_condition_count_ambiguity_is_not_silently_filled():
-    data = load_hecht_panda_data()
+    data = _hecht_panda_data_or_skip()
     assert len(data["conditions"]) == 9
     assert not any(
         condition["P_nozzle_bar_abs"] == 4.0
@@ -269,7 +279,7 @@ def test_hecht_panda_condition_count_ambiguity_is_not_silently_filled():
 def test_hecht_panda_throat_density_supports_real_gas_normalization():
     from CoolProp.CoolProp import PropsSI
 
-    data = load_hecht_panda_data()
+    data = _hecht_panda_data_or_skip()
     relative_errors = [
         PropsSI(
             "D",
