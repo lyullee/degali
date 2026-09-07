@@ -1,5 +1,8 @@
 # DEGALI — Dense Gas Dispersion for Liquid Hydrogen
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22646258.svg)](https://doi.org/10.5281/zenodo.22646258)
+[![PyPI](https://img.shields.io/pypi/v/degali.svg)](https://pypi.org/project/degali/)
+
 DEGALI stands for **Dense Gas Dispersion for Liquid Hydrogen**. It is a modern
 Python model built from a verified reimplementation of the US EPA DEGADIS 2.1
 dense-gas dispersion model and extended for cryogenic hydrogen releases.
@@ -125,9 +128,9 @@ workflow. See [security and safety reporting](SECURITY.md).
 
 ## Citation and license
 
-Citation metadata are provided in [`CITATION.cff`](CITATION.cff). Zenodo's
-GitHub integration assigns the DOI after the first release; the DOI is added
-to the citation metadata in the first post-release metadata update.
+Citation metadata, including the version DOI, are provided in
+[`CITATION.cff`](CITATION.cff). The README DOI badge uses the concept DOI so it
+continues to resolve to the latest archived DEGALI release.
 
 The complete GitHub, Zenodo DOI and PyPI release sequence is documented in the
 [publication guide](docs/publication-guide.md).
