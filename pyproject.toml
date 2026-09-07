@@ -58,6 +58,8 @@ include = [
   "tools",
   "docs",
   "README.md",
+  "USER_GUIDE.md",
+  "USER_GUIDE_KO.md",
   "LICENSE",
   "CHANGELOG.md",
   "CITATION.cff",

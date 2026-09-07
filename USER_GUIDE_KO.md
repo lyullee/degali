@@ -413,8 +413,8 @@ profile, jet, source = run_jet_to_ground("JET.INO", "GROUND.IN")
 - `.INO`는 제트 조건과 자체 물성 표를 포함
 - 사용자 정의 `.ER1`·`.ER2`가 없으면 EPA 예제 기본 수치계수가 사용됨
 
-덱 전체 필드 순서는 [`src/degali/io/inp.py`](../src/degali/io/inp.py)와
-[`src/degali/io/jetdeck.py`](../src/degali/io/jetdeck.py)의 모듈 설명에 기록돼
+덱 전체 필드 순서는 [`src/degali/io/inp.py`](src/degali/io/inp.py)와
+[`src/degali/io/jetdeck.py`](src/degali/io/jetdeck.py)의 모듈 설명에 기록돼
 있다. 기존 덱을 수정할 때는 원본을 보존하고 한 항목씩 변경한다.
 
 ## 9. `legacy`와 `coolprop` 선택
@@ -485,14 +485,14 @@ DEGALI 0.1.0 버전 DOI는
 
 ## 12. 추가 기술문서
 
-- [물리이론·검증·결과 통합 기술문서](technical-reference.md)
-- [현재 모델 상태와 한계](status.md)
-- [검증 과정](validation.md)
-- [정량 현장시험 검증](field-validation.md)
-- [검증 주장 등급](claim-grading.md)
-- [외부 자료 출처와 재현 절차](DATA_AND_REPRODUCTION.md)
-- [공개 배포 범위](publication-scope.md)
-- [안전 및 보안 보고](../SECURITY.md)
+- [물리이론·검증·결과 통합 기술문서](docs/technical-reference.md)
+- [현재 모델 상태와 한계](docs/status.md)
+- [검증 과정](docs/validation.md)
+- [정량 현장시험 검증](docs/field-validation.md)
+- [검증 주장 등급](docs/claim-grading.md)
+- [외부 자료 출처와 재현 절차](docs/DATA_AND_REPRODUCTION.md)
+- [공개 배포 범위](docs/publication-scope.md)
+- [안전 및 보안 보고](SECURITY.md)
 
 오류 보고 시 운영체제, Python 버전, DEGALI 버전, 최소 재현 코드, 전체 오류
 메시지를 포함하되 제3자 원시 실험 데이터는 GitHub 이슈에 첨부하지 않는다.

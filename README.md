@@ -18,10 +18,10 @@ dense-gas dispersion model and extended for cryogenic hydrogen releases.
 단독 근거로 사용하면 안 됩니다. 자세한 판정은
 [1차 결과](docs/stage1-results-2026-09-06.md)를 참고하십시오.
 
-처음 설치하거나 실제 계산을 시작하려면
-**[한국어 상세 사용 가이드](docs/user-guide-ko.md)**를 참고하십시오. LH₂
-간편 평가, 결과 해석, CSV 저장, 민감도 분석, 기존 DEGADIS 입력 덱과 CLI
-사용법을 단계별로 설명합니다.
+처음 설치하거나 실제 계산을 시작하려면 상세 사용 가이드를 참고하십시오:
+**[한국어](USER_GUIDE_KO.md) · [English](USER_GUIDE.md)**. LH₂ 간편
+평가, 결과 해석, CSV 저장, 민감도 분석, 기존 DEGADIS 입력 덱과 CLI 사용법을
+단계별로 설명합니다.
 
 ## What is included
 
@@ -62,39 +62,109 @@ See [model status](docs/stage1-results-2026-09-06.md),
 
 ## Installation
 
-Create a Python 3.10 or newer environment and install from a clone:
+Install Python 3.10 or newer. For LH2 work, install DEGALI with the CoolProp
+extra:
 
 ```bash
-python -m pip install -e ".[test]"
+python -m pip install "degali[coolprop]"
 ```
 
-CoolProp is optional for the DEGADIS 2.1 compatibility path and required for
-most cryogenic-hydrogen calculations:
+Check the installed version and command-line interface:
 
 ```bash
-python -m pip install -e ".[coolprop]"
+python -c "import degali; print(degali.__version__)"
+degali --help
 ```
 
-## Quick start
+CoolProp is required for LH2 calculations. The traditional DEGADIS
+compatibility path can be installed with `python -m pip install degali`.
+
+## Quick manual
+
+### Liquid-hydrogen release without an input deck
+
+The simplest public interface is `degali.lh2.assess`. The example below
+represents a horizontal 0.1 kg/s release through a 10 mm orifice, 0.5 m above
+ground, from saturated LH2 stored at 6 bar absolute:
+
+```python
+from degali.lh2 import assess
+
+result = assess(
+    rate=0.10,                  # kg/s
+    wind=2.0,                   # m/s at release height
+    height=0.50,                # m
+    orifice=0.010,              # m; use pool_diameter instead for a pool
+    storage_pressure=6.0,       # bar(a), not gauge pressure
+    ambient_temperature=288.15, # K
+    relative_humidity=65.0,     # percent
+    ambient_pressure=101325.0,  # Pa
+    max_distance=30.0,          # m
+    at_distance=10.0,           # m
+)
+
+print(result.report())
+for warning in result.warnings:
+    print("WARNING:", warning)
+```
+
+The principal outputs are:
+
+- `distance_to_lfl`: centreline distance to the hydrogen LFL of 4 mol%, m;
+- `distance_to_stoichiometric`: centreline stoichiometric distance, m;
+- `lowest_flammable_height`: lowest flammable-gas height, m;
+- `regime`: `grounded`, `low`, or `aloft`;
+- `trajectory`: NumPy columns `[distance, centre height, mole fraction]`;
+- `warnings`: validation-range and applicability warnings. Do not discard them.
+
+Specify exactly one source geometry: `orifice` for a pressurised jet or
+`pool_diameter` for a pool/evaporation source. `storage_pressure` is bar(a),
+while `ambient_pressure` is Pa. All temperatures are K.
+
+### Save the LH2 trajectory
+
+```python
+import numpy as np
+
+np.savetxt(
+    "lh2_trajectory.csv",
+    result.trajectory,
+    delimiter=",",
+    header="distance_m,height_m,centreline_mole_fraction",
+    comments="",
+)
+```
+
+### Existing DEGADIS input decks
 
 ```python
 from degali import run_steady, run_transient, run_jet_to_ground
 
-profile, source = run_steady("B9.INP")
+profile, source = run_steady("CASE.INP", backend="legacy")
 print(profile.distance_to(0.05))
 
-transient = run_transient("B9T.INP")
-profile, jet, source = run_jet_to_ground("EX2.INO", "EX2.IN")
+transient = run_transient("TRANSIENT.INP")
+profile, jet, source = run_jet_to_ground("JET.INO", "GROUND.IN")
 ```
 
-The command-line interface exposes the same main workflows:
+The equivalent command-line workflows are:
 
 ```bash
-degali steady B9.INP
-degali transient B9T.INP --snapshot 60 --snapshot 120
-degali dose B9T.INP --at 200 --at 400 --at 800
-degali jet EX2.INO --bridge EX2.IN
+degali steady CASE.INP
+degali transient TRANSIENT.INP --snapshot 60 --snapshot 120
+degali dose TRANSIENT.INP --at 50 --at 100 --at 200
+degali jet JET.INO --bridge GROUND.IN
 ```
+
+DEGADIS decks are positional files: a missing value changes the meaning of
+every field that follows. Their pressure convention also differs from
+`assess()`. Preserve the original deck, verify units, and change one field at
+a time. Input decks and licensed third-party data are not bundled.
+
+For complete installation, input, output, plotting, parameter-study, deck,
+validation-range, and troubleshooting instructions, see the root-level
+**[English user guide](USER_GUIDE.md)** or
+**[한국어 사용자 가이드](USER_GUIDE_KO.md)**.
 
 ## Verification
 
