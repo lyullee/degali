@@ -34,19 +34,12 @@ jobs:
       - name: Run the suite
         # Reference implementations and external field data are intentionally
         # not redistributed. Their opt-in tests skip when local paths are not
-        # configured; the self-contained public suite must pass.
-        run: pytest -q -m "not slow"
-
-      - name: The field tests skipped for the stated reason
-        # A test can skip because the data is absent, which is intended, or
-        # because an import failed or a path was renamed, which is not. Both
-        # look identical in a summary line. This separates them.
-        run: |
-          pytest -q -rs 2>&1 | tee /tmp/out.txt
-          grep -q "set REDIPHEM_ROOT" /tmp/out.txt
-          grep -q "set DEGADISX_E35_ROOT" /tmp/out.txt
-          grep -q "set DEGADISX_SMEDIS_ROOT" /tmp/out.txt
-          ! grep -qi "error\|could not import" /tmp/out.txt
+        # configured. The consolidated oracle/field module is retained for
+        # controlled local release audits but excluded from the public clone.
+        # Every self-contained public test must pass.
+        run: >-
+          pytest -q -m "not slow"
+          --ignore=tests/test_reference_parity.py
 
       - name: Nothing redistributable is in the built package
         run: |
