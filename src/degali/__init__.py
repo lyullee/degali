@@ -10,8 +10,9 @@ acceptable means of determining LNG vapour dispersion exclusion zones.
 foundation.  The goal is not a transliteration:
 the numerics are modernised (SciPy integrators and root finders in place of
 the bundled Runge-Kutta-Gill and Brent routines, CoolProp equations of state
-in place of the 1989 correlations), while every step is validated against the
-original Fortran running in the same repository.
+in place of the 1989 correlations), while the compatibility path was validated
+against a controlled local build of the original Fortran. The original Fortran
+is not redistributed.
 
 Two backends are available throughout:
 

@@ -18,6 +18,11 @@ dense-gas dispersion model and extended for cryogenic hydrogen releases.
 단독 근거로 사용하면 안 됩니다. 자세한 판정은
 [1차 결과](docs/stage1-results-2026-09-06.md)를 참고하십시오.
 
+처음 설치하거나 실제 계산을 시작하려면
+**[한국어 상세 사용 가이드](docs/user-guide-ko.md)**를 참고하십시오. LH₂
+간편 평가, 결과 해석, CSV 저장, 민감도 분석, 기존 DEGADIS 입력 덱과 CLI
+사용법을 단계별로 설명합니다.
+
 ## What is included
 
 - Python ports of all six DEGADIS 2.1 programs. The independently obtained
