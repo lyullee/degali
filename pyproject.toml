@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "degali"
-version = "0.1.0.dev0"
+version = "0.1.0"
 description = "Dense Gas Dispersion for Liquid Hydrogen, built on a verified DEGADIS 2.1 reimplementation"
 authors = [
   { name = "Ugwiyeon Lee" },

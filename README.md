@@ -125,9 +125,9 @@ workflow. See [security and safety reporting](SECURITY.md).
 
 ## Citation and license
 
-Citation metadata are provided in [`CITATION.cff`](CITATION.cff). Before the
-first archived release, the maintainer must add the reserved DOI and release
-date.
+Citation metadata are provided in [`CITATION.cff`](CITATION.cff). Zenodo's
+GitHub integration assigns the DOI after the first release; the DOI is added
+to the citation metadata in the first post-release metadata update.
 
 The complete GitHub, Zenodo DOI and PyPI release sequence is documented in the
 [publication guide](docs/publication-guide.md).

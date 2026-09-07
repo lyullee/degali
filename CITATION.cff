@@ -7,28 +7,24 @@ type: software
 # block at all, which Zenodo rejects; it is the kind of thing that is found at
 # the moment of publication rather than before it.
 #
-# BEFORE THE FIRST RELEASE, fill in `version`, `doi` and `date-released`.
-# `docs/release-readiness.md` records why
-# the order matters: a parallel project archived a version whose README and
-# CITATION pointed at the *previous* version's DOI, because they were written
-# before the DOI existed. Reserve the DOI first, write it here, then archive,
-# then check the archived copy rather than the working tree.
+# Zenodo's GitHub integration assigns the DOI after the first GitHub release.
+# Add that DOI in the first post-release metadata update; never copy a DOI from
+# another project or version into this file.
 authors:
   - family-names: "Lee"
     given-names: "Ugwiyeon"
     affiliation: "Korea Gas Safety Corporation"
     # orcid: "https://orcid.org/0000-0000-0000-0000"
 
-version: "0.1.0.dev0"
-# doi: "10.5281/zenodo.XXXXXXX"     # reserve it, then fill it in
-# date-released: YYYY-MM-DD
+version: "0.1.0"
+date-released: 2026-09-07
 
 abstract: >-
   DEGALI (Dense Gas Dispersion for Liquid Hydrogen) reimplements DEGADIS 2.1,
-  the dense gas dispersion model of Spicer and Havens, in Python. The port is
-  validated against the original FORTRAN
-  built from source in the same repository, at full double precision, through
-  purpose-written probes rather than against printed output. It is separately
+  the dense gas dispersion model of Spicer and Havens, in Python. The port was
+  validated against a controlled local build of the original FORTRAN, at full
+  double precision, through purpose-written probes rather than against printed
+  output. The original FORTRAN is not redistributed. DEGALI is separately
   evaluated against the Risoe REDIPHEM database of heavy-gas release field
   trials, against the SMEDIS model-evaluation spreadsheets, and against the
   PRESLHY E3.5 liquid hydrogen campaign; the liquid hydrogen configuration adds

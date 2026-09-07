@@ -63,8 +63,10 @@ check and is not part of public CI.
 
 The SLAB release history contains a version that must not be cited: its
 archived README and `CITATION.cff` point at the *previous* version's DOI rather
-than their own, because they were written before the DOI existed. The fix is
-to mint the DOI first, or to reserve it, and to check the archived copy rather
-than the working tree.
+than their own. DEGALI uses Zenodo's GitHub integration, which assigns a DOI
+only after the first GitHub release. The first archive therefore carries the
+correct title, author, version, release date and repository URL without a DOI;
+the newly assigned DOI is added in the first post-release metadata update.
+Never insert a DOI belonging to another project or version.
 
 That is worth knowing before the first release rather than after it.
