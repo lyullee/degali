@@ -1,0 +1,83 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "degali"
+version = "0.1.0.dev0"
+description = "Dense Gas Dispersion for Liquid Hydrogen, built on a verified DEGADIS 2.1 reimplementation"
+authors = [
+  { name = "Ugwiyeon Lee" },
+]
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+keywords = [
+  "dispersion",
+  "dense gas",
+  "heavy gas",
+  "DEGADIS",
+  "liquid hydrogen",
+  "cryogenic hydrogen",
+  "LNG",
+  "process safety",
+  "consequence modelling",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Topic :: Scientific/Engineering :: Atmospheric Science",
+  "Topic :: Scientific/Engineering :: Physics",
+]
+dependencies = ["numpy>=1.23", "scipy>=1.10"]
+
+[project.optional-dependencies]
+coolprop = ["CoolProp>=6.4"]
+test = ["pytest>=7", "CoolProp>=6.4", "PyYAML>=6", "openpyxl>=3.1"]
+
+[project.scripts]
+degali = "degali.cli:main"
+
+[project.urls]
+Source = "https://github.com/lyullee/degali"
+Documentation = "https://github.com/lyullee/degali#readme"
+Changelog = "https://github.com/lyullee/degali/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/degali"]
+
+[tool.hatch.build.targets.sdist]
+# Ship DEGALI itself, its tests, tools and documentation. Licensed/reference
+# implementations and external experimental data remain local and are not
+# redistributed; see docs/publication-scope.md.
+include = [
+  "src",
+  "tests",
+  "tools",
+  "docs",
+  "README.md",
+  "LICENSE",
+  "CHANGELOG.md",
+  "CITATION.cff",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
+  "requirements-research.txt",
+  ".gitattributes",
+]
+exclude = [
+  "**/*.partial.json",
+  "**/*.pdf",
+  "**/*.xls",
+  "**/*.xlsx",
+  "**/*.dbf",
+  "reference/**",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "tools"]
+markers = [
+  "slow: exercises a whole model run, or a whole trial series",
+]

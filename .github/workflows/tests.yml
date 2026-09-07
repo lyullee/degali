@@ -1,0 +1,67 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # A clone with none of the third-party data must pass. This is the claim
+  # `docs/release-readiness.md` makes, and until now it was only made in prose:
+  # the REDIPHEM tests read an environment variable, but the PRESLHY and SMEDIS
+  # tests held paths from the machine the work was done on, so they skipped on
+  # a clone for the wrong reason. Nothing checked the difference. This job is
+  # what checks it, by running in exactly that state -- no variables set.
+  clone:
+    name: "clone, no data configured"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install
+        run: pip install -e ".[test]" pyyaml
+
+      - name: Check the public snapshot
+        run: python tools/check_publication.py
+
+      - name: Run the suite
+        # Reference implementations and external field data are intentionally
+        # not redistributed. Their opt-in tests skip when local paths are not
+        # configured; the self-contained public suite must pass.
+        run: pytest -q -m "not slow"
+
+      - name: The field tests skipped for the stated reason
+        # A test can skip because the data is absent, which is intended, or
+        # because an import failed or a path was renamed, which is not. Both
+        # look identical in a summary line. This separates them.
+        run: |
+          pytest -q -rs 2>&1 | tee /tmp/out.txt
+          grep -q "set REDIPHEM_ROOT" /tmp/out.txt
+          grep -q "set DEGADISX_E35_ROOT" /tmp/out.txt
+          grep -q "set DEGADISX_SMEDIS_ROOT" /tmp/out.txt
+          ! grep -qi "error\|could not import" /tmp/out.txt
+
+      - name: Nothing redistributable is in the built package
+        run: |
+          pip install build
+          python -m build --sdist --wheel
+          python - <<'PY'
+          import pathlib, zipfile, tarfile
+          bad = (".xls", ".xlsx", ".dbf", ".DBF", ".pdf", ".pem", ".p12", ".pfx")
+          for whl in pathlib.Path("dist").glob("*.whl"):
+              names = zipfile.ZipFile(whl).namelist()
+              assert not [n for n in names if n.endswith(bad)], whl
+              assert whl.stat().st_size < 50 * 1024 * 1024, whl
+          for sd in pathlib.Path("dist").glob("*.tar.gz"):
+              names = tarfile.open(sd).getnames()
+              assert not [n for n in names if n.endswith(bad)], sd
+              assert sd.stat().st_size < 50 * 1024 * 1024, sd
+          print("ok")
+          PY

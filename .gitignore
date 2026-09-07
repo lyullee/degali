@@ -1,0 +1,30 @@
+# Python environments and caches
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# Build products and local scratch work
+build/
+dist/
+*.egg-info/
+tmp/
+tmp_probe.py
+tmp_probe/
+
+# Licensed/reference implementations and all external experimental data remain
+# local.  The public repository contains provenance, methods and derived
+# validation summaries only; it does not redistribute these source materials.
+reference/
+
+# IDE and operating-system files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+desktop.ini

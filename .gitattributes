@@ -1,0 +1,19 @@
+* text=auto eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.toml text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.csv text eol=lf
+*.for text eol=lf
+*.FOR text eol=lf
+*.inp text eol=lf
+*.INP text eol=lf
+*.lis text eol=lf
+*.LIS text eol=lf
+
+# Historical fixed-format oracle files and golden decks retain their original
+# spacing; do not report those spaces as newly introduced source defects.
+reference/fortran/** whitespace=-trailing-space,-space-before-tab
+reference/testcases/** whitespace=-trailing-space,-space-before-tab

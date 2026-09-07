@@ -1,0 +1,11 @@
+# Scientific runtime used for the 2026-09-05 buoyancy-width screen (Python 3.12).
+# Reconstructed frozen boundary values are checked before any candidate run.
+numpy==2.3.5
+scipy==1.18.1
+CoolProp==8.0.0
+pytest==9.1.1
+packaging==26.3
+colorama==0.4.6
+iniconfig==2.3.0
+pluggy==1.6.0
+pygments==2.21.0
