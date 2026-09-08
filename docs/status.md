@@ -1,5 +1,17 @@
 # degali — project status
 
+> **2026-09-08 latest — observed thermal/species profile moments:** a new
+> coefficient-free observation operator pairs the official PRESLHY Trial 10/23
+> temperature and H2 signals at x=1.78/4.00 m on the same five vertical points.
+> Both trials pass the frozen lag and minimum-pair gates. The thermal/species
+> median width ratio is near one upstream and 1.154/1.103 downstream; median
+> squared-width growth ratios are 1.472/1.450. This does not justify setting
+> `D_h/D_C=1.45`, because temperature deficit is not transported enthalpy and
+> the finite sensor window omits lateral/outer tails. It does rule out promoting
+> the earlier 0.8235 thermal-width sensitivity from these data. No trajectory or
+> default changed. Next gate: compare model centre amplitude and thermal second
+> moment after applying the identical five-point observation operator.
+
 > **USER RESUME 2026-09-06 14:34 KST:** measured-vector `step001` executed and
 > completed (`reference/preslhy/observed_wind_vector_step001_2026-09-06`,
 > 1066 steps). This is a measured-vector + observed magnitude + observed

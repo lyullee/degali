@@ -13,7 +13,7 @@ ignored `reference/` tree and are not distributed with DEGALI.
 | PRESLHY E3.5 source mass flow | raw meter histories plus the D4.8 pressure-drop reconstruction | usable with trial-specific quality flags |
 | PRESLHY E3.5 nozzle state | pipe/nozzle pressure and nozzle-flow/wall thermocouples | usable, subject to two-phase sensor interpretation |
 | PRESLHY E3.5 atmospheric boundary | ambient temperature, RH, wind speed and direction | usable at the reported reference height; no local 3-component wind |
-| PRESLHY E3.5 plume temperature and H2 | thermocouple arrays, Xensor and Drager channels | usable with alignment, saturation and coordinate caveats |
+| PRESLHY E3.5 plume temperature and H2 | thermocouple arrays, Xensor and Drager channels | usable with alignment, saturation and coordinate caveats; paired 1.78/4 m vertical thermal/species moments now reduced for Trials 10/23 |
 | transported turbulent energy | no `u/v/w`, velocity RMS, Reynolds stress, `k`, or `epsilon` in the E3.5 workbooks | not identifiable from current data |
 | condensed-air relaxation | literature establishes condensation; no matched particle size, phase fraction, or slip history | bounded only |
 | ELVHYS Tests 10 and 11 geometry | archive dictionary separates the nozzle at 250 mm from bottom samplers at 200 mm | usable for archive reduction |

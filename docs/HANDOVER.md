@@ -1,5 +1,19 @@
 # Handover
 
+> **LATEST 2026-09-08 — paired thermal/species observation operator:**
+> Official PRESLHY E3.5 Trial 10/23 workbooks were reduced read-only at the
+> collocated x=1.78/4.00 m, y=0, five-point vertical crosses. The calculation
+> was pre-registered, hashes every raw and executable input, fits no coefficient,
+> and distributes no external data. Thermal/species widths are approximately
+> equal at 1.78 m, but the thermal-deficit profile is wider at 4.00 m. Median
+> squared-width growth ratios are 1.4723 (Trial 10) and 1.4501 (Trial 23).
+> Do **not** use these temperature-deficit ratios as `D_h/D_C`; they reject the
+> direction of the prior 0.8235 sensitivity but do not identify an enthalpy
+> diffusivity. Read `observed-thermal-profile-moments-results.md` first. Next:
+> project model output through this exact finite five-sensor operator and require
+> simultaneous centre-amplitude and second-moment agreement before promoting a
+> thermal closure. TKE remains unidentifiable from these workbooks.
+
 > **USER RESUME 14:34 KST:** measured_vector `step001` executed to completion
 > (`reference/preslhy/observed_wind_vector_step001_2026-09-06`, 1066 steps).
 > Four-cell same-key re-audit complete:

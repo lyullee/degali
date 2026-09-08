@@ -2,6 +2,12 @@
 
 ## Unreleased - GitHub alpha snapshot
 
+- Added a pre-registered, coefficient-free observation operator for collocated
+  PRESLHY Trial 10/23 temperature-deficit and hydrogen profiles. The public
+  code computes finite five-sensor zeroth/centroid/second moments and lag
+  diagnostics, while the external workbooks and generated audit JSON remain
+  local and excluded from distribution. No model coefficient or default was
+  changed.
 - Renamed the project, Python package and command from `degadisx` to `degali`.
   DEGALI means **Dense Gas Dispersion for Liquid Hydrogen**. This is a naming
   migration only; it does not change the frozen physical or numerical results.
