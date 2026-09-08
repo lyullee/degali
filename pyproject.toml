@@ -79,7 +79,10 @@ exclude = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src", "tools"]
+# Keep both supported research-tool import styles working when CI invokes the
+# ``pytest`` console script: legacy ``import audit_x`` and the explicit
+# ``import tools.audit_x`` package path.
+pythonpath = ["src", ".", "tools"]
 markers = [
   "slow: exercises a whole model run, or a whole trial series",
 ]
