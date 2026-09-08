@@ -144,3 +144,9 @@ sensitivity branch and reported as structurally unvalidated.
 The D4.8 source comparison has now been completed; see
 [`d48-source-boundary-reconciliation-results.md`](d48-source-boundary-reconciliation-results.md).
 The trial-specific pressure-loss values were retained.
+
+The sealed downstream evidence has also been combined without reintegration;
+see [`downstream-residual-map-results.md`](downstream-residual-map-results.md).
+It rejects resolved mean-kinetic-energy thermalisation as the primary
+cold-core explanation and fixes independent thermal-profile transport as the
+next bounded implementation target.
