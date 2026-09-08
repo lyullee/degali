@@ -133,11 +133,14 @@ Reynolds-stress and `epsilon` profiles has not been located.
 
 ## 5. Implementation consequence
 
-The next DEGALI step can proceed without another bulk download. First rerun
-the source boundary with the D4.8 flow hierarchy and coordinate correction,
-then decompose downstream temperature, density, buoyancy and energy residuals
-for PRESLHY Trials 10 and 23. A transported-TKE or finite-relaxation parameter
+The next DEGALI step can proceed without another bulk download. The source
+boundary has been reconciled with the D4.8 flow hierarchy, so the next new
+work is the downstream temperature, density, buoyancy and energy residual
+analysis for PRESLHY Trials 10 and 23. A transported-TKE or finite-relaxation parameter
 must not be fitted until an independent velocity/TKE or particle-slip datum is
 obtained. Until then, such physics should be implemented as a bounded
 sensitivity branch and reported as structurally unvalidated.
 
+The D4.8 source comparison has now been completed; see
+[`d48-source-boundary-reconciliation-results.md`](d48-source-boundary-reconciliation-results.md).
+The trial-specific pressure-loss values were retained.
