@@ -95,4 +95,3 @@ sigma_trunc^2 = integral((z-zbar)^2 phi dz) / M0
 입력 해시와 함께 저장했다. 원본 Excel과 결과 JSON은 배포 패키지에
 포함하지 않는다. 사전 명세는
 [`prereg-observed-thermal-profile-moments.md`](prereg-observed-thermal-profile-moments.md)다.
-

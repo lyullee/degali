@@ -78,4 +78,3 @@ Prandtl or Schmidt number and cannot promote a downstream closure by itself.
   support carrying that value as a research sensitivity.  Disagreement or
   poor common-delay evidence leaves the ratio explicit.  No value from this
   audit becomes a default and no field trajectory is re-integrated.
-
