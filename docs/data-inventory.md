@@ -5,6 +5,9 @@ cannot support. Written because most of the effort in a model-evaluation study
 goes into finding out what the data actually is, and that finding-out is
 usually thrown away.
 
+For the trial-by-trial decision on what can constrain the next LH2 model
+stage, see [`lh2-data-readiness.md`](lh2-data-readiness.md).
+
 ---
 
 ## 1. DEGADIS 2.1 itself

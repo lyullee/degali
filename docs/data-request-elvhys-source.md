@@ -23,9 +23,10 @@ Contact listed in the dataset README: Wayne Rattigan, HSE,
    their physical coordinates, tap geometry, response time, calibration
    uncertainty and which signal underlies D4.6 Table 5's mean nozzle pressure.
 4. Confirmation of the horizontal nozzle centre coordinates. The archive
-   sensor sheet gives `(20, 500, 250) mm`; D4.6 Table 1 gives
-   `(20, 500, 200) mm`. Please identify the as-built value for Tests 10 and
-   11 and any test-to-test repositioning.
+   data dictionary explicitly separates the inlet at `(20, 500, 250) mm`
+   from the Bottom 1--9 samplers at `z = 200 mm`; D4.6 Table 1 nevertheless
+   gives the inlet as `(20, 500, 200) mm`. The archive reduction now uses
+   250 mm, but an as-built confirmation remains useful for publication.
 5. Nozzle thermocouple junction type, diameter, mounting/contact method,
    exact coordinate, sampling response/time constant, radiation correction
    if any, and whether `NozzleTemp` represents wall, two-phase stream or gas
@@ -58,11 +59,12 @@ Tests 10 and 11, including units, uncertainty and time alignment? If flow was
 not measured, could you instead provide the effective nozzle area or discharge
 coefficient and the upstream thermodynamic/pipe information used to infer it?
 
-I would also appreciate clarification of two items that materially affect the
-comparison: the archive sensor sheet gives the horizontal nozzle elevation as
-250 mm while D4.6 Table 1 gives 200 mm, and the README dates the campaign to
-autumn 2024 while the metadata and filenames identify November 2025. Please
-confirm the as-built nozzle coordinates and actual test dates. If available,
+I would also appreciate confirmation of two provenance items: the archive
+data dictionary distinguishes the 250 mm horizontal-nozzle elevation from the
+200 mm bottom-sampler elevation, while D4.6 Table 1 lists the nozzle at
+200 mm; the README dates the campaign to autumn 2024 while the metadata and
+filenames identify November 2025. The archive reduction uses a 250 mm nozzle,
+but please confirm the as-built coordinates and actual test dates. If available,
 the PT1/PT2 reference basis and locations, nozzle-thermocouple construction and
 response, H2 sampling-line response, and released-hydrogen ortho/para
 composition would allow the uncertainty analysis to remain independent of

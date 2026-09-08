@@ -58,7 +58,9 @@ validation experiments.
 
 See [model status](docs/stage1-results-2026-09-06.md),
 [claim grading](docs/claim-grading.md), and
-[data/reproduction notes](docs/DATA_AND_REPRODUCTION.md).
+[data/reproduction notes](docs/DATA_AND_REPRODUCTION.md). The current
+availability and limitations of the LH2 measurements are summarized in the
+[LH2 data-readiness register](docs/lh2-data-readiness.md).
 
 ## Installation
 

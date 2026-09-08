@@ -97,10 +97,12 @@ ventilation near 500 L/min. Unlike the earlier field sets, it supplies raw
 
 This is valuable but not a free-jet dataset. Walls, floor, ventilation,
 finite-volume accumulation and vent exchange act on the observations. The
-pre-registered Test-10/Test-11 screen also found no measured hydrogen mass
-flow, materially different actual nozzle pressure/temperature histories, and
-an official 200-versus-250 mm nozzle-elevation conflict. No quantitative
-model score is defensible until those boundary data are clarified. See
+pre-registered Test-10/Test-11 screen found no measured hydrogen mass flow and
+materially different actual nozzle pressure/temperature histories. The
+archive dictionary now resolves the apparent 200-versus-250 mm conflict: the
+horizontal nozzle is at 250 mm and the bottom samplers are at 200 mm. D4.6's
+200 mm nozzle entry is retained as a report discrepancy. No quantitative
+free-jet model score is defensible without the hydrogen source flow. See
 [`elvhys-tcs-audit.md`](elvhys-tcs-audit.md) and the exact request in
 [`data-request-elvhys-source.md`](data-request-elvhys-source.md).
 

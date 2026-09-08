@@ -8,10 +8,10 @@ The ELVHYS WP4.2 archive is useful for testing an eventual confined-release
 model, but Tests 10 and 11 cannot yet be used as a quantitative validation of
 the present free-jet model. The public files contain hydrogen concentration,
 temperature, pressure, fan-flow and ambient channels, but no hydrogen mass
-flow. Two official documents also disagree on whether the horizontal nozzle
-is at `z = 200 mm` or `z = 250 mm`. Both quantities are first-order boundary
-conditions; guessing either would convert an independent validation into an
-unrecorded calibration.
+flow. The archive data dictionary now separates the formerly ambiguous
+coordinates: the horizontal nozzle is at `z = 250 mm`, while the Bottom 1--9
+samplers are at `z = 200 mm`. D4.6's 200 mm nozzle entry remains a report
+discrepancy, but the archive reduction no longer needs to guess the geometry.
 
 No model coefficient was changed from this screen.
 
@@ -41,8 +41,8 @@ downloaded. Their official MD5 values were verified:
 | 11 | PRES | `a3db4d373885667f7d1a254129d2c758` |
 | 11 | TEMP | `438034654dd079e6d440bc1501879b81` |
 
-The archive remains under `tmp/elvhys/`; it is third-party source material
-and is not vendored into the package.
+The selected archive remains under `reference/elvhys_wp4_2/`; it is
+third-party source material and is not vendored into the package.
 
 ## Frozen reduction and result
 
@@ -73,11 +73,11 @@ identical test labels do not isolate model error at a local probe.
 
 ## Geometry and source ambiguities
 
-1. The archive sensor sheet places the horizontal inlet at
-   `(20, 500, 250) mm`. D4.6 Table 1 places it at `(20, 500, 200) mm`, on the
-   same elevation as Bottom 1--9. The resulting radial offset is either 50 mm
-   or zero. For a 1 mm jet at the 80 mm first station this is not a small
-   perturbation.
+1. The archive data dictionary places the horizontal inlet at
+   `(20, 500, 250) mm` and separately places Bottom 1--9 at `z = 200 mm`.
+   Archive calculations therefore use a 50 mm radial offset. D4.6 Table 1's
+   `(20, 500, 200) mm` inlet remains documented as a report inconsistency,
+   rather than propagated as a second geometry branch.
 2. `FLMT` contains only `FanFlowMeter`; the P&ID has no hydrogen mass-flow
    measurement. D4.6 explicitly says the 25.4 mm pressure-peaking tests used
    an estimated 180--200 g/s from previous work. That estimate does not
