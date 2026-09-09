@@ -2,6 +2,21 @@
 
 ## Unreleased - GitHub alpha snapshot
 
+- Completed the preregistered direct-flux thermal-moment extension for PRESLHY
+  Trials 11, 12, 22, 23, 24 and 25. All six linear-phase paths reach their
+  frozen downstream stations at both step levels, retain positive sampled
+  diffusivity, close independently reconstructed order-16 balances below
+  `5.05e-11`, and pass the `0.005` terminal convergence gate. No downstream
+  sensor score or default-model promotion is implied.
+- Replaced the legacy `1e-4`-tolerance width root only inside the independent
+  Gaussian-enthalpy research path with the cancellation-safe analytic positive
+  root of the same JETPLU width constraints. The core DEGADIS-compatible
+  splitter remains unchanged. This removes the numerical width plateau that
+  stopped Trials 12 and 24.
+- Added an opt-in, nodally exact C1 Hermite phase-property lookup. An independent
+  8,000-point oracle screen reduced temperature RMS lookup error from
+  `1.15e-4` to `4.19e-5 K` with no nonnegative density slopes. The package
+  default remains the established bilinear lookup.
 - Added a pre-registered classical-RK4 path that transports total mass,
   hydrogen mass, vector momentum, total energy and the physical thermal second
   moment directly, reconstructing a bounded physical section at every stage.

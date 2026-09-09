@@ -56,6 +56,14 @@ but worsens other acceptance metrics, so it is not the default. These samples
 are correlated observations from one campaign, not 38 or 41 independent
 validation experiments.
 
+The research-only six-flux thermal-moment marcher now passes its preregistered
+numerical extension across PRESLHY Trials 11, 12, 22, 23, 24 and 25: all coarse
+and refined paths reach their frozen stations, with maximum independent balance
+residual `5.05e-11` and maximum terminal flux difference `1.57e-4`. This is a
+conservation, solvability and step-convergence result—not a new field-accuracy
+score or safety-design validation. See the
+[thermal-moment extension results](docs/thermal-moment-flux-extension-results.md).
+
 See [model status](docs/stage1-results-2026-09-06.md),
 [claim grading](docs/claim-grading.md), and
 [data/reproduction notes](docs/DATA_AND_REPRODUCTION.md). The current

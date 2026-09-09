@@ -68,6 +68,22 @@ class PhaseMassEnthalpyInverter:
         slope = -dh_dt * ti/(rho+self.k*c) - dh_dy*y/rho
         return h, slope
 
+    def enthalpy_partials(self, density, fuel_density):
+        """Return dH/drho at fixed C and dH/dC at fixed rho."""
+        rho, c = np.broadcast_arrays(np.asarray(density, float), np.asarray(fuel_density, float))
+        h_rho = self.enthalpy_and_slope(rho, c)[1]
+        y, ti = c/rho, self.a/(rho+self.k*c)
+        i = np.clip(np.searchsorted(self.t_grid, ti, side="right")-1, 0, len(self.t_grid)-2)
+        j = np.clip(np.searchsorted(self.y_grid, y, side="right")-1, 0, len(self.y_grid)-2)
+        dt, dy = self.t_grid[i+1]-self.t_grid[i], self.y_grid[j+1]-self.y_grid[j]
+        f, g = (ti-self.t_grid[i])/dt, (y-self.y_grid[j])/dy
+        h00, h01 = self.h_values[i, j], self.h_values[i, j+1]
+        h10, h11 = self.h_values[i+1, j], self.h_values[i+1, j+1]
+        h_t = ((1.-g)*(h10-h00)+g*(h11-h01))/dt
+        h_y = ((1.-f)*(h01-h00)+f*(h11-h10))/dy
+        h_c = -h_t*ti*self.k/(rho+self.k*c)+h_y/rho
+        return h_rho, h_c
+
     def state(self, fuel_density, enthalpy_density, *, density_guess=None):
         """Return rho, Y, T; reject unbracketed or inaccurate roots."""
         c, h = np.broadcast_arrays(np.asarray(fuel_density, float), np.asarray(enthalpy_density, float))
@@ -117,9 +133,16 @@ class GaussianEnthalpyCrosswind(IndependentEnergyCrosswind):
     and energy. It never uses the density-Gaussian analytic mass shortcut.
     """
 
-    def __init__(self, jetplume, thermodynamics, **kwargs):
+    def __init__(self, jetplume, thermodynamics, *, phase_interpolation="linear", **kwargs):
         super().__init__(jetplume, thermodynamics, **kwargs)
-        self.phase_inverse = PhaseMassEnthalpyInverter(thermodynamics)
+        if phase_interpolation == "linear":
+            self.phase_inverse = PhaseMassEnthalpyInverter(thermodynamics)
+        elif phase_interpolation == "c1_hermite":
+            from .smooth_phase_lookup import SmoothPhaseMassEnthalpyInverter
+            self.phase_inverse = SmoothPhaseMassEnthalpyInverter(thermodynamics)
+        else:
+            raise ValueError("phase interpolation must be 'linear' or 'c1_hermite'")
+        self.phase_interpolation = phase_interpolation
 
     def _quadrature(self, points):
         """Exact polar reduction of JETPLU's finite square Gaussian domain.
@@ -138,6 +161,20 @@ class GaussianEnthalpyCrosswind(IndependentEnergyCrosswind):
                 np.r_[2.*math.pi*q0*w, (2.*math.pi-8.*np.arctan(s))*2.*q0*s*w],
             )
         return self._quadrature_cache[points]
+
+    def _split_widths(self, sysz, sya, sza):
+        """Solve the established two-width geometry without root quantization."""
+        sysz, sya, sza = map(float, (sysz, sya, sza))
+        difference = (sya-sza)*(sya+sza)
+        discriminant = math.hypot(difference, 2.*sysz)
+        if difference >= 0.:
+            lateral_squared = .5*(discriminant+difference)
+        else:
+            lateral_squared = 2.*sysz*sysz/(discriminant-difference)
+        lateral = math.sqrt(lateral_squared)
+        if getattr(self.jetplume, "spread_floor", False) and lateral < sya:
+            lateral = sya
+        return lateral, sysz/lateral
 
     def quadrature_error(self, coarse, fine):
         """Non-Gaussian density requires checking every conserved flux."""

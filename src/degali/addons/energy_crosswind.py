@@ -251,8 +251,14 @@ class IndependentEnergyCrosswind:
             )
         else:
             sza = 0.0
-        _sy, sz = self.jetplume._split(sysz, sya, sza)
+        _sy, sz = self._split_widths(sysz, sya, sza)
         return float(self.jetplume._wind(z, sz, math.cos(theta)))
+
+    def _split_widths(
+        self, sysz: float, sya: float, sza: float,
+    ) -> tuple[float, float]:
+        """Retain the established JETPLU numerical width split by default."""
+        return self.jetplume._split(sysz, sya, sza)
 
     def _geometry(
         self, state: np.ndarray
@@ -279,7 +285,7 @@ class IndependentEnergyCrosswind:
                 )
                 * ct
             )
-        sy, sz = self.jetplume._split(sysz, sya, sza)
+        sy, sz = self._split_widths(sysz, sya, sza)
         half_depth = self.k.delta * sz * ct
         ground_width = 0.0
         cleared_fraction = 1.0

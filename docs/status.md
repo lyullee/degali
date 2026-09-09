@@ -1,5 +1,17 @@
 # degali — project status
 
+> **2026-09-10 local latest — six-trial direct-flux thermal extension:** the
+> independent Gaussian-enthalpy path now solves the established width geometry
+> analytically instead of using the legacy `1e-4` Brent width root. The core
+> DEGADIS-compatible splitter is unchanged. Preregistered coarse/refined marches
+> for PRESLHY Trials 11, 12, 22, 23, 24 and 25 all reach their frozen stations;
+> maximum independent order-16 balance is `5.05e-11`, maximum terminal physical
+> parameter difference `1.13e-3`, and maximum flux difference `1.57e-4` versus
+> the `0.005` gates. Trials 12/24 no longer stop at the numerical width plateau.
+> The C1 phase lookup remains opt-in and the six-trial result uses the default
+> linear lookup. No sensor score, fitted coefficient, field-accuracy claim or
+> default model promotion. Read `thermal-moment-flux-extension-results.md`.
+
 > **2026-09-08 local latest — thermal-moment reach:** the opt-in Trial 10
 > conservative thermal-width state reaches x=1.78 m in both guarded step runs.
 > Terminal state/value refinement differences pass the .005 gate and no local

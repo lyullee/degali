@@ -1,5 +1,20 @@
 # Handover
 
+> **LATEST 2026-09-10 — analytic-width six-trial thermal-flux extension:**
+> The retained Trial 12/24 failures were traced to `jetplume._split` using a
+> `1e-4` absolute Brent tolerance inside a section inverse operating at much
+> smaller parameter increments. `GaussianEnthalpyCrosswind` now overrides a
+> new hook with the cancellation-safe positive quadratic root of the identical
+> width constraints; the parent/core path keeps the legacy solver. The M2 area
+> Jacobian now agrees across `1e-5`, `3e-6`, and `1e-6` differences. All six
+> frozen Trials 11/12/22/23/24/25 pass boundary reprojection, coarse/refined
+> target reach, positive diffusion, independent balance and `.005` convergence.
+> Maximum balance `5.05e-11`, parameter difference `1.13e-3`, flux difference
+> `1.57e-4`. Evidence JSON remains local/ignored; do not publish raw PRESLHY
+> data. The linear phase lookup remains default and no field score/promotion was
+> made. Next scientific gate is the separately preregistered identical-sensor
+> observation comparison, not another numerical tolerance relaxation.
+
 > **LOCAL NEXT 2026-09-08 — conservative thermal-moment downstream reach:**
 > The guarded Trial 10 state-space march reaches the first profile station
 > from x=.79661 to x=1.78414 m; the half-step run reaches x=1.78074 m. Terminal

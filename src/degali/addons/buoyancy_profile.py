@@ -81,19 +81,8 @@ class BuoyancyConstrainedEnthalpySection(GaussianEnthalpyCrosswind):
         return np.maximum(np.abs(values), [1e-12, 1e-12, 1., 1., 1., 1e-3])
 
     def _phase_partials(self, rho, c):
-        """dH/drho at fixed C, dH/dC at fixed rho on the same bilinear table."""
-        inv = self.phase_inverse
-        _, h_rho = inv.enthalpy_and_slope(rho, c)
-        y, ti = c/rho, inv.a/(rho+inv.k*c)
-        i = np.clip(np.searchsorted(inv.t_grid, ti, side="right")-1, 0, len(inv.t_grid)-2)
-        j = np.clip(np.searchsorted(inv.y_grid, y, side="right")-1, 0, len(inv.y_grid)-2)
-        dt, dy = inv.t_grid[i+1]-inv.t_grid[i], inv.y_grid[j+1]-inv.y_grid[j]
-        f, g = (ti-inv.t_grid[i])/dt, (y-inv.y_grid[j])/dy
-        h00, h01 = inv.h_values[i, j], inv.h_values[i, j+1]
-        h10, h11 = inv.h_values[i+1, j], inv.h_values[i+1, j+1]
-        h_t = ((1-g)*(h10-h00)+g*(h11-h01))/dt
-        h_y = ((1-f)*(h01-h00)+f*(h11-h10))/dy
-        return h_rho, -h_t*ti*inv.k/(rho+inv.k*c)+h_y/rho
+        """dH/drho at fixed C and dH/dC at fixed rho from one phase oracle."""
+        return self.phase_inverse.enthalpy_partials(rho, c)
 
     def reduced_moment_jacobian(self, state, *, quadrature_points=None):
         """Four-moment derivatives in log(rho_c,A,uc,beta), at fixed H2 flux.

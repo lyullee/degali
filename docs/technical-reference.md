@@ -221,8 +221,8 @@ Raman 검증 경로는 축대칭 Gaussian 제트에서 총질량, H2 질량, 수
 ### 6.1 독립 열폭
 
 다섯 플럭스 수송식과 두 위치식만으로 열폭이 추가된 여덟 상태의 미분을
-결정할 수 없다. 필요한 추가 수송량 후보는 엔탈피 플럭스의 2차 단면
-모멘트다.
+결정할 수 없다. 연구 경로는 여섯 번째 수송량으로 엔탈피 플럭스의 2차
+단면 모멘트를 사용한다.
 
 ```text
 M_h2 = integral(r_perp^2 J_s) dA
@@ -232,9 +232,25 @@ dM_h2/ds = 2 integral(r_perp dot J_perp) dA
             - boundary_integral(r_perp^2 J_perp dot n) dl
 ```
 
-실제 구현에는 곡률, 비등방 폭의 이동 경계, 지면 절단, 성분 확산에 따른
-엔탈피 교차유량이 필요하다. 따라서 `d beta_H/ds=0` 같은 임의 가정으로
-닫지 않으며, 폐쇄되지 않은 경계 객체는 하류 계산을 명시적으로 거부한다.
+현재 자유 평면 경로는 곡률과 비등방 이동경계, 질량·성분·엔탈피 횡플럭스,
+축방향 전단생산 및 축소 부력일을 약형 모멘트 수지에 포함한다. 여섯 물리
+플럭스를 RK4의 주상태로 직접 적분하고 매 stage에서 양의 단면상태로
+역산한다. 내부 stage 역산과 수용 endpoint를 구분하며, 역산 실패에만
+스텝 축소와 8회 성공 후 재성장을 적용한다. 물리 폐쇄 실패는 완화하지 않고
+즉시 중단한다.
+
+독립 열모델의 폭은 기존 JETPLU 조건
+`sigma_y*sigma_z=A`, `sigma_y^2-sigma_z^2=D`의 양의 이차근으로 계산한다.
+이는 기존 `1e-4` Brent 폭 분해가 미세 진행에서 만든 수치 plateau를 제거한
+것이며 원본 호환 경로의 분해기는 변경하지 않는다. 기본 상표 보간은 여전히
+bilinear이고, nodal-exact C1 Hermite 보간은 명시적으로 선택하는 민감도다.
+
+PRESLHY 11, 12, 22, 23, 24, 25의 고정 경계모멘트와 하류 station에서
+coarse/refined 6/6 경로가 목표에 도달했다. 독립 order-16 보존잔차 최대값은
+`5.05×10^-11`, terminal 물리상태 차이는 최대 `1.13×10^-3`, 플럭스 차이는
+최대 `1.57×10^-4`다. 이는 수치적 solvability·보존·간격수렴 근거이며,
+하류 관측 적합도나 일반 설계범위 검증을 뜻하지 않는다. 지면 절단과 완전한
+압력/TKE 폐쇄는 이 경로에 아직 포함되지 않는다.
 
 ### 6.2 유한 TKE
 
@@ -437,6 +453,7 @@ pytest -q
 - [저온 혼상 근거](cold-mixed-phase-evidence.md)
 - [유한 TKE 결과](finite-tke-transport-results.md)
 - [열폭 수송 요구조건](thermal-width-transport-requirements.md)
+- [열모멘트 플럭스 확장 결과](thermal-moment-flux-extension-results.md)
 - [공개 범위](publication-scope.md)
 
 ## 14. 최종 기술 판정

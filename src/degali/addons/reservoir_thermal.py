@@ -140,13 +140,20 @@ class ReservoirThermalMoments:
 
 class ReservoirShortSegment:
     """Opt-in research driver; not the default plume/receptor implementation."""
-    def __init__(self, jetplume, thermodynamics, *, thermal_species_ratio, mechanical_work):
+    def __init__(self, jetplume, thermodynamics, *, thermal_species_ratio, mechanical_work,
+                 phase_interpolation="linear"):
         self.jp, self.th = jetplume, thermodynamics
         self.ratio, self.work = thermal_species_ratio, mechanical_work
+        if phase_interpolation not in ("linear", "c1_hermite"):
+            raise ValueError("phase interpolation must be 'linear' or 'c1_hermite'")
+        self.phase_interpolation = phase_interpolation
 
     def evaluate(self, parameters, *, order=8, probes=257):
         state, beta = decode_section(parameters)
-        section = BuoyancyConstrainedEnthalpySection(self.jp, self.th, thermal_width_ratio=beta)
+        section = BuoyancyConstrainedEnthalpySection(
+            self.jp, self.th, thermal_width_ratio=beta,
+            phase_interpolation=self.phase_interpolation,
+        )
         mixing = ConservativeTransverseMixing(section, state)
         result = ReservoirThermalMoments(mixing, thermal_species_ratio=self.ratio,
                                          mechanical_work=self.work).evaluate(order=order, probes=probes)

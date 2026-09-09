@@ -10,6 +10,7 @@ pytest.importorskip("CoolProp")
 from CoolProp.CoolProp import PropsSI
 
 from degali.addons.axisymmetric_jet import AxisymmetricJetSource, ConservedGaussianJet, phase_ambient_from_rh
+from degali.addons.energy_crosswind import IndependentEnergyCrosswind
 from degali.addons.enthalpy_profile import GaussianEnthalpyCrosswind, PhaseMassEnthalpyInverter
 from degali.core.jetplume import JetCoefficients
 
@@ -36,6 +37,43 @@ def candidate(phase):
         _wind=lambda *_: 2., _wind_profile=lambda *_: (2., 0.),
     )
     return GaussianEnthalpyCrosswind(jp, phase, quadrature_points=64)
+
+
+def test_enthalpy_width_split_solves_both_geometry_constraints(candidate):
+    candidate.jetplume.spread_floor = False
+    rng = np.random.default_rng(240913)
+    for sysz, sya, sza in 10.**rng.uniform(-3., 3., size=(256, 3)):
+        sy, sz = candidate._split_widths(sysz, sya, sza)
+        difference = (sya-sza)*(sya+sza)
+        assert sy*sz == pytest.approx(sysz, rel=2e-14)
+        assert sy*sy-sz*sz == pytest.approx(
+            difference, rel=2e-14, abs=2e-10*max(abs(difference), 1.),
+        )
+
+
+def test_parent_width_split_hook_retains_the_legacy_solver(candidate):
+    expected = candidate.jetplume._split(2.3, .7, .2)
+    actual = IndependentEnergyCrosswind._split_widths(candidate, 2.3, .7, .2)
+    assert actual == expected
+
+
+def test_enthalpy_width_split_has_a_step_independent_area_derivative(candidate):
+    candidate.jetplume.spread_floor = False
+    area, sya, sza = .0023, .018, .041
+    sy, sz = candidate._split_widths(area, sya, sza)
+    lateral_squared = sy*sy
+    difference = (sya-sza)*(sya+sza)
+    dt = 2.*area*area/(2.*lateral_squared-difference)
+    expected = dt+2.*area*area/lateral_squared-area*area/lateral_squared**2*dt
+
+    def spread(log_area):
+        y, z = candidate._split_widths(math.exp(log_area), sya, sza)
+        return y*y+z*z
+
+    centre = math.log(area)
+    for step in (1e-5, 3e-6, 1e-6):
+        actual = (spread(centre+step)-spread(centre-step))/(2.*step)
+        assert actual == pytest.approx(expected, rel=2e-9, abs=2e-12)
 
 
 def test_local_phase_inverse_roundtrip_across_cold_and_warm_table(phase):

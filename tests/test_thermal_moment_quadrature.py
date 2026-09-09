@@ -16,7 +16,7 @@ from degali.addons.thermal_moment_quadrature import adaptive_unit_diffusion_resp
 def test_adaptive_response_matches_independent_smooth_face_integrals(section, tolerance):
     op = EnthalpyMomentOperators(section)
     op.radial_diffusion_coefficient = lambda state, q: -3.*np.exp(-.8*q)
-    section.jetplume._split = lambda a, *_: (2.*math.sqrt(a), .5*math.sqrt(a))
+    section._split_widths = lambda a, *_: (2.*math.sqrt(a), .5*math.sqrt(a))
     sy, sn = section.section_widths(STATE)
     def fields(y, n):
         q = .5*((y/sy)**2+(n/sn)**2)

@@ -22,6 +22,14 @@ from .transverse_mixing import ConservativeTransverseMixing
 _FLUX_FLOORS = np.array([1e-12, 1e-12, 1., 1., 1., 1.])
 
 
+class FluxInverseError(ValueError):
+    """A transported flux vector cannot meet the section inverse tolerance."""
+
+
+class LocalClosureError(ValueError):
+    """The selected local physical closure is outside its valid domain."""
+
+
 @dataclass(frozen=True)
 class ThermalMomentFluxMatch:
     parameters: np.ndarray
@@ -41,19 +49,25 @@ class ThermalMomentFluxMarchResult:
     cumulative_sources: np.ndarray
     rhs_calls: int
     accepted_steps: int
+    rejected_steps: int
+    step_growths: int
+    endpoint_fallback_attempts: int
+    endpoint_fallback_successes: int
     reached_target: bool
     stop_reason: str
     maximum_inverse_residual: float
     maximum_weak_residual: float
     minimum_sampled_diffusivity: float
     maximum_edge_heat_defect: float
+    minimum_accepted_step: float
 
 
 class ThermalMomentFluxInverter:
     """Invert six section fluxes without introducing a fitted closure."""
 
     def __init__(self, jetplume, thermodynamics, *, order=8, probes=257,
-                 quadrature_points=128, tolerance=1e-8):
+                 quadrature_points=128, tolerance=1e-8,
+                 phase_interpolation="linear"):
         if isinstance(order, bool) or int(order) != order or order < 4:
             raise ValueError("flux quadrature order must be an integer of at least four")
         if isinstance(probes, bool) or int(probes) != probes or probes < 33:
@@ -63,6 +77,9 @@ class ThermalMomentFluxInverter:
         self.jp, self.th = jetplume, thermodynamics
         self.order, self.probes = int(order), int(probes)
         self.quadrature_points, self.tolerance = int(quadrature_points), float(tolerance)
+        if phase_interpolation not in ("linear", "c1_hermite"):
+            raise ValueError("phase interpolation must be 'linear' or 'c1_hermite'")
+        self.phase_interpolation = phase_interpolation
 
     @staticmethod
     def scales(values):
@@ -84,6 +101,7 @@ class ThermalMomentFluxInverter:
         section = BuoyancyConstrainedEnthalpySection(
             self.jp, self.th, thermal_width_ratio=beta,
             quadrature_points=self.quadrature_points,
+            phase_interpolation=self.phase_interpolation,
         )
         state = np.array([rho, .1, area, theta, uc, position[0], position[1]])
         i1 = section.k.profile_integral(1.)
@@ -128,12 +146,16 @@ class ThermalMomentFluxInverter:
         section = BuoyancyConstrainedEnthalpySection(
             self.jp, self.th, thermal_width_ratio=beta,
             quadrature_points=self.quadrature_points,
+            phase_interpolation=self.phase_interpolation,
         )
         mixing = ConservativeTransverseMixing(section, state, probes=self.probes)
         return ReservoirShortSegment.flux_values(mixing, order=self.order)
 
-    def match(self, target, initial_parameters, *, position=None):
+    def match(self, target, initial_parameters, *, position=None, tolerance=None):
         target = self._validate_target(target)
+        limit = self.tolerance if tolerance is None else float(tolerance)
+        if not math.isfinite(limit) or limit <= 0.:
+            raise ValueError("inverse acceptance tolerance must be positive and finite")
         initial = np.asarray(initial_parameters, float)
         state0, _ = decode_section(initial)
         if position is None:
@@ -180,11 +202,13 @@ class ThermalMomentFluxInverter:
         values, _, state, mixing = evaluate(result.x)
         scaled = (values-target)/self.scales(target)
         beta = float(np.exp(result.x[3]))
-        if (not result.success or np.max(np.abs(scaled)) > self.tolerance
+        if (not result.success or np.max(np.abs(scaled)) > limit
                 or beta <= .5+1e-8 or beta >= 2.-1e-8):
-            raise ValueError(
+            raise FluxInverseError(
                 f"six-flux inverse failed: success={result.success}, "
-                f"residual={np.max(np.abs(scaled)):.3e}, beta={beta:.9g}"
+                f"residual={np.max(np.abs(scaled)):.3e}, beta={beta:.9g}, "
+                f"components={np.array2string(scaled, precision=3)}, "
+                f"optimality={result.optimality:.3e}, nfev={result.nfev}"
             )
         parameters = encode_section(state, beta)
         parameters[3], parameters[5:7] = theta, position
@@ -199,7 +223,7 @@ class FluxSpaceThermalMomentMarch:
     """Classical RK4 march whose primary state is six physical fluxes."""
 
     def __init__(self, inverter, *, thermal_species_ratio, mechanical_work,
-                 local_evaluator=None):
+                 stage_inverse_tolerance=None, local_evaluator=None):
         if not hasattr(inverter, "match") or not hasattr(inverter, "fluxes"):
             raise TypeError("a six-flux inverter is required")
         if mechanical_work != "reduced_buoyancy_work":
@@ -208,6 +232,11 @@ class FluxSpaceThermalMomentMarch:
             raise ValueError("thermal/species diffusivity ratio must be positive and finite")
         self.inverter = inverter
         self.ratio, self.work = float(thermal_species_ratio), mechanical_work
+        if stage_inverse_tolerance is not None:
+            stage_inverse_tolerance = float(stage_inverse_tolerance)
+            if not math.isfinite(stage_inverse_tolerance) or stage_inverse_tolerance <= 0.:
+                raise ValueError("stage inverse tolerance must be positive and finite")
+        self.stage_inverse_tolerance = stage_inverse_tolerance
         self.local_evaluator = local_evaluator
 
     def _local(self, match):
@@ -219,7 +248,10 @@ class FluxSpaceThermalMomentMarch:
         ).evaluate(order=self.inverter.order, probes=self.inverter.probes)
 
     def _rhs(self, primary, guess, diagnostics):
-        match = self.inverter.match(primary[:6], guess, position=primary[6:8])
+        match = self.inverter.match(
+            primary[:6], guess, position=primary[6:8],
+            tolerance=self.stage_inverse_tolerance,
+        )
         out = self._local(match)
         required = (
             "ledger", "moment_rate", "weak_budget_scaled_error",
@@ -227,7 +259,7 @@ class FluxSpaceThermalMomentMarch:
             "edge_gradient_defects", "valid",
         )
         if any(key not in out for key in required) or not out["valid"]:
-            raise ValueError("local thermal-moment closure is invalid or incomplete")
+            raise LocalClosureError("local thermal-moment closure is invalid or incomplete")
         sources = np.r_[np.asarray(out["ledger"]["sources"], float), float(out["moment_rate"])]
         if sources.shape != (6,) or not np.all(np.isfinite(sources)):
             raise ValueError("local six-flux source vector is invalid")
@@ -260,7 +292,8 @@ class FluxSpaceThermalMomentMarch:
         return primary+weighted, p4, weighted[:6]
 
     def march(self, initial_parameters, length, *, step, target_x=None,
-              maximum_steps=4000, target_tolerance=1e-8, progress=None):
+              maximum_steps=4000, target_tolerance=1e-8, minimum_step=None,
+              progress=None):
         values = (length, step, target_tolerance)
         if not all(math.isfinite(float(v)) and float(v) > 0. for v in values):
             raise ValueError("length, step and target tolerance must be positive and finite")
@@ -270,6 +303,11 @@ class FluxSpaceThermalMomentMarch:
         state, _ = decode_section(parameters)
         if target_x is not None and not math.isfinite(float(target_x)):
             raise ValueError("target_x must be finite")
+        if minimum_step is not None:
+            minimum_step = float(minimum_step)
+            if (not math.isfinite(minimum_step) or minimum_step <= 0.
+                    or minimum_step > float(step)):
+                raise ValueError("minimum_step must be positive, finite and no larger than step")
         if progress is not None and not callable(progress):
             raise TypeError("progress must be callable")
         initial_fluxes = np.asarray(self.inverter.fluxes(parameters), float)
@@ -279,14 +317,21 @@ class FluxSpaceThermalMomentMarch:
         diagnostics = dict(rhs_calls=0, maximum_inverse_residual=0., maximum_weak_residual=0.,
                            minimum_sampled_diffusivity=math.inf, maximum_edge_heat_defect=0.)
         reason, reached = "arc-length ceiling reached", False
+        current_step = float(step)
+        rejected = 0
+        step_growths = 0
+        endpoint_fallback_attempts = 0
+        endpoint_fallback_successes = 0
+        successful_reduced_steps = 0
+        minimum_accepted = math.inf
 
-        for _ in range(int(maximum_steps)):
+        while len(arc)-1 < int(maximum_steps):
             if arc[-1] >= length:
                 break
             if target_x is not None and abs(primary[6]-target_x) <= target_tolerance:
                 reached, reason = True, "target x reached"
                 break
-            ds = min(float(step), float(length)-arc[-1])
+            ds = min(current_step, float(length)-arc[-1])
             if target_x is not None:
                 direction = math.cos(decode_section(parameters)[0][3])
                 remaining = target_x-primary[6]
@@ -306,15 +351,30 @@ class FluxSpaceThermalMomentMarch:
                             break
                         slope = (next_primary[6]-primary[6])/ds
                         corrected = ds-(next_primary[6]-target_x)/slope
-                        if not 0. < corrected <= float(step)*(1.+1e-12):
+                        if not 0. < corrected <= current_step*(1.+1e-12):
                             raise ValueError("target-x step correction left its bracket")
                         ds = corrected
                         next_primary, next_guess, source_increment = self._rk4(
                             primary, ds, parameters, diagnostics,
                         )
-                endpoint = self.inverter.match(
-                    next_primary[:6], next_guess, position=next_primary[6:8],
-                )
+                try:
+                    endpoint = self.inverter.match(
+                        next_primary[:6], next_guess, position=next_primary[6:8],
+                    )
+                except FluxInverseError:
+                    endpoint_fallback_attempts += 1
+                    endpoint = self.inverter.match(
+                        next_primary[:6], parameters, position=next_primary[6:8],
+                    )
+                    endpoint_fallback_successes += 1
+            except FluxInverseError as exc:
+                if minimum_step is None or ds <= minimum_step*(1.+1e-12):
+                    reason = f"step rejected: {exc}"
+                    break
+                rejected += 1
+                current_step = max(.5*ds, minimum_step)
+                successful_reduced_steps = 0
+                continue
             except (ArithmeticError, FloatingPointError, RuntimeError, ValueError, np.linalg.LinAlgError) as exc:
                 reason = f"step rejected: {exc}"
                 break
@@ -323,6 +383,7 @@ class FluxSpaceThermalMomentMarch:
             flux_history.append(primary[:6].copy())
             parameter_history.append(parameters.copy())
             cumulative.append(cumulative[-1]+source_increment)
+            minimum_accepted = min(minimum_accepted, ds)
             diagnostics["maximum_inverse_residual"] = max(
                 diagnostics["maximum_inverse_residual"],
                 float(np.max(np.abs(endpoint.scaled_residuals))),
@@ -332,25 +393,42 @@ class FluxSpaceThermalMomentMarch:
             if target_x is not None and abs(primary[6]-target_x) <= target_tolerance:
                 reached, reason = True, "target x reached"
                 break
-        else:
+            full_ordinary_step = ds >= current_step*(1.-1e-12)
+            if minimum_step is not None and current_step < float(step) and full_ordinary_step:
+                successful_reduced_steps += 1
+                if successful_reduced_steps >= 8:
+                    current_step = min(2.*current_step, float(step))
+                    successful_reduced_steps = 0
+                    step_growths += 1
+            else:
+                successful_reduced_steps = 0
+        if len(arc)-1 >= int(maximum_steps) and not reached:
             reason = "accepted-step budget exhausted"
 
         minimum = diagnostics["minimum_sampled_diffusivity"]
         if math.isinf(minimum):
             minimum = math.nan
+        if math.isinf(minimum_accepted):
+            minimum_accepted = math.nan
         return ThermalMomentFluxMarchResult(
             arc_length=np.asarray(arc), fluxes=np.asarray(flux_history),
             parameters=np.asarray(parameter_history), cumulative_sources=np.asarray(cumulative),
             rhs_calls=diagnostics["rhs_calls"], accepted_steps=len(arc)-1,
+            rejected_steps=rejected,
+            step_growths=step_growths,
+            endpoint_fallback_attempts=endpoint_fallback_attempts,
+            endpoint_fallback_successes=endpoint_fallback_successes,
             reached_target=reached, stop_reason=reason,
             maximum_inverse_residual=diagnostics["maximum_inverse_residual"],
             maximum_weak_residual=diagnostics["maximum_weak_residual"],
             minimum_sampled_diffusivity=float(minimum),
             maximum_edge_heat_defect=diagnostics["maximum_edge_heat_defect"],
+            minimum_accepted_step=float(minimum_accepted),
         )
 
 
 __all__ = [
     "ThermalMomentFluxInverter", "ThermalMomentFluxMatch",
     "FluxSpaceThermalMomentMarch", "ThermalMomentFluxMarchResult",
+    "FluxInverseError", "LocalClosureError",
 ]
