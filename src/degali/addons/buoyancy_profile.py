@@ -60,6 +60,42 @@ class BuoyancyConstrainedEnthalpySection(GaussianEnthalpyCrosswind):
         rho, y, t = self.phase_inverse.state(c, h, density_guess=guess)
         return rho, y, t, h
 
+    def _receptor(self, state, lateral, height):
+        """Return a ground-image receptor with independent C and H widths.
+
+        The direct and reflected Gaussian fields are superposed separately.
+        Applying the thermal exponent after adding the species images would
+        introduce a cross term whenever ``thermal_width_ratio != 1``.
+        """
+        rho_c, yc, *_rest, centre_z = self._physical(state)
+        sy, sz = self.section_widths(state)
+        lateral = float(lateral)
+        height = float(height)
+        if not math.isfinite(lateral) or not math.isfinite(height):
+            raise ValueError("receptor coordinates must be finite")
+        q_lateral = .5*(lateral/sy)**2
+        q_direct = .5*((height-centre_z)/sz)**2
+        q_image = .5*((height+centre_z)/sz)**2
+        power = 1./self.thermal_width_ratio**2
+        species_shape = math.exp(-q_lateral)*(
+            math.exp(-q_direct)+math.exp(-q_image)
+        )
+        enthalpy_shape = math.exp(-power*q_lateral)*(
+            math.exp(-power*q_direct)+math.exp(-power*q_image)
+        )
+        centre_fuel_density = rho_c*yc
+        centre_enthalpy = self.phase_inverse.enthalpy_and_slope(
+            np.asarray(rho_c), np.asarray(centre_fuel_density)
+        )[0]
+        fuel_density = np.asarray([centre_fuel_density*species_shape])
+        enthalpy_density = np.asarray([float(centre_enthalpy)*enthalpy_shape])
+        guess = np.asarray([
+            self.rhoa+(rho_c-self.rhoa)*species_shape
+        ])
+        return (*self.phase_inverse.state(
+            fuel_density, enthalpy_density, density_guess=guess,
+        ), enthalpy_density)
+
     def moments(self, state, *, quadrature_points=None):
         """Mass, H2, Px, Pz, total energy, buoyancy force per metre."""
         if self.energy_transport != "total":
@@ -241,7 +277,6 @@ class BuoyancyConstrainedEnthalpySection(GaussianEnthalpyCrosswind):
     derivatives = _no_transport
     source_terms = _no_transport
     _match_flux_array = _no_transport
-    _receptor = _no_transport
 
     def project(self, *args, **kwargs):
         raise NotImplementedError("use project_buoyancy with all six boundary moments")

@@ -62,6 +62,64 @@ class ThermalMomentFluxMarchResult:
     minimum_accepted_step: float
 
 
+class ThermalMomentFluxTrajectory:
+    """Query a direct-flux march at physical receptor coordinates."""
+
+    def __init__(self, jetplume, thermodynamics, parameters, *,
+                 phase_interpolation="linear"):
+        values = np.asarray(parameters, float)
+        if (values.ndim != 2 or values.shape[1] != 8 or len(values) < 2
+                or not np.all(np.isfinite(values))):
+            raise ValueError("at least two finite eight-parameter sections required")
+        order = np.argsort(values[:, 5])
+        values = values[order]
+        if np.any(np.diff(values[:, 5]) <= 0.):
+            raise ValueError("trajectory downwind coordinates must increase strictly")
+        self.parameters = values
+        self.x = values[:, 5]
+        self.model = BuoyancyConstrainedEnthalpySection(
+            jetplume, thermodynamics, thermal_width_ratio=1.,
+            phase_interpolation=phase_interpolation,
+        )
+
+    def parameters_at(self, x, *, tolerance=1e-8):
+        x = float(x)
+        tolerance = float(tolerance)
+        if (not math.isfinite(x) or not math.isfinite(tolerance)
+                or tolerance < 0. or x < self.x[0]-tolerance
+                or x > self.x[-1]+tolerance):
+            return None
+        x = min(max(x, self.x[0]), self.x[-1])
+        return np.array([
+            np.interp(x, self.x, self.parameters[:, column])
+            for column in range(self.parameters.shape[1])
+        ])
+
+    def state_at(self, x):
+        parameters = self.parameters_at(x)
+        return None if parameters is None else decode_section(parameters)[0]
+
+    def _section_at(self, x):
+        parameters = self.parameters_at(x)
+        if parameters is None:
+            return None, None
+        state, beta = decode_section(parameters)
+        self.model.thermal_width_ratio = beta
+        return state, self.model
+
+    def concentration_at(self, x, y, z):
+        state, model = self._section_at(x)
+        if state is None:
+            return 0.0
+        return 100.*model.point_mole_fraction(state, y, z)
+
+    def temperature_at(self, x, y, z):
+        state, model = self._section_at(x)
+        if state is None:
+            return float(self.model.thermodynamics.ambient_temperature)
+        return model.point_temperature(state, y, z)
+
+
 class ThermalMomentFluxInverter:
     """Invert six section fluxes without introducing a fitted closure."""
 
@@ -223,7 +281,8 @@ class FluxSpaceThermalMomentMarch:
     """Classical RK4 march whose primary state is six physical fluxes."""
 
     def __init__(self, inverter, *, thermal_species_ratio, mechanical_work,
-                 stage_inverse_tolerance=None, local_evaluator=None):
+                 stage_inverse_tolerance=None, local_evaluator=None,
+                 positivity_domain="full_square"):
         if not hasattr(inverter, "match") or not hasattr(inverter, "fluxes"):
             raise TypeError("a six-flux inverter is required")
         if mechanical_work != "reduced_buoyancy_work":
@@ -238,6 +297,9 @@ class FluxSpaceThermalMomentMarch:
                 raise ValueError("stage inverse tolerance must be positive and finite")
         self.stage_inverse_tolerance = stage_inverse_tolerance
         self.local_evaluator = local_evaluator
+        if positivity_domain not in ("full_square", "radial_core"):
+            raise ValueError("positivity domain must be 'full_square' or 'radial_core'")
+        self.positivity_domain = positivity_domain
 
     def _local(self, match):
         if self.local_evaluator is not None:
@@ -245,6 +307,7 @@ class FluxSpaceThermalMomentMarch:
         return ReservoirThermalMoments(
             match.mixing, thermal_species_ratio=self.ratio,
             mechanical_work=self.work,
+            positivity_domain=self.positivity_domain,
         ).evaluate(order=self.inverter.order, probes=self.inverter.probes)
 
     def _rhs(self, primary, guess, diagnostics):
@@ -259,7 +322,29 @@ class FluxSpaceThermalMomentMarch:
             "edge_gradient_defects", "valid",
         )
         if any(key not in out for key in required) or not out["valid"]:
-            raise LocalClosureError("local thermal-moment closure is invalid or incomplete")
+            if any(key not in out for key in required):
+                raise LocalClosureError(
+                    "local thermal-moment closure is invalid or incomplete"
+                )
+            family = out.get("family")
+            family_residual = getattr(family, "maximum_scaled_residual", math.nan)
+            failures = []
+            if not math.isfinite(float(family_residual)) or family_residual > 1e-8:
+                failures.append(f"tangent={family_residual:.3e}")
+            if out["weak_budget_scaled_error"] > 1e-5:
+                failures.append(f"weak={out['weak_budget_scaled_error']:.3e}")
+            if not out.get("incoming", False):
+                failures.append(f"outward_mass={out.get('maximum_outward_mass', math.nan):.3e}")
+            if not out.get("positive_diffusion", False):
+                failures.append(
+                    f"chi=({out['minimum_chi_species']:.3e},"
+                    f"{out['minimum_chi_momentum']:.3e})"
+                )
+            curvature = out.get("curvature_half_width", math.nan)
+            if not math.isfinite(float(curvature)) or curvature >= .1:
+                failures.append(f"curvature={curvature:.3e}")
+            detail = ", ".join(failures) if failures else "unclassified gate"
+            raise LocalClosureError(f"local thermal-moment closure failed: {detail}")
         sources = np.r_[np.asarray(out["ledger"]["sources"], float), float(out["moment_rate"])]
         if sources.shape != (6,) or not np.all(np.isfinite(sources)):
             raise ValueError("local six-flux source vector is invalid")

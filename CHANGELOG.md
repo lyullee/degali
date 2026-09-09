@@ -2,6 +2,19 @@
 
 ## Unreleased - GitHub alpha snapshot
 
+- Added an identical-sensor Trial 10/23 audit of the coefficient-free direct-
+  flux thermal-moment path. Both step levels reach 4 m and pass conservation,
+  terminal and 40-sensor refinement gates, but thermal centre-amplitude error
+  worsens while variance error improves. The preregistered observation gate
+  therefore fails and no research or default path is promoted.
+- Added an opt-in `radial_core` constitutive-validity domain after diagnosing
+  that the full-circle cumulative diffusivity identity was being evaluated on
+  square-clipped outer contours. It changes no full-square conserved integral,
+  source or side flux, and does not clip a diffusivity. The existing
+  `full_square` behavior remains default.
+- Corrected the independent-width ground-image receptor to superpose direct
+  and reflected species and enthalpy fields separately, avoiding a nonphysical
+  image cross term when the thermal and species widths differ.
 - Completed the preregistered direct-flux thermal-moment extension for PRESLHY
   Trials 11, 12, 22, 23, 24 and 25. All six linear-phase paths reach their
   frozen downstream stations at both step levels, retain positive sampled

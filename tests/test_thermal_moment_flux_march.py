@@ -13,6 +13,7 @@ from degali.addons.thermal_moment_flux_march import (
     FluxInverseError,
     FluxSpaceThermalMomentMarch,
     ThermalMomentFluxInverter,
+    ThermalMomentFluxTrajectory,
 )
 
 
@@ -112,6 +113,11 @@ def test_flux_march_rejects_invalid_physics_choices():
     with pytest.raises(ValueError):
         FluxSpaceThermalMomentMarch(_IdentityInverter(), thermal_species_ratio=1.,
                                     mechanical_work="none")
+    with pytest.raises(ValueError, match="positivity domain"):
+        FluxSpaceThermalMomentMarch(
+            _IdentityInverter(), thermal_species_ratio=1.,
+            mechanical_work="reduced_buoyancy_work", positivity_domain="corners",
+        )
 
 
 def test_only_inverse_failure_halves_and_retains_the_smaller_step():
@@ -179,3 +185,54 @@ def test_local_physical_failure_is_not_retried_or_step_halved():
     assert result.rejected_steps == 0
     assert result.endpoint_fallback_attempts == 0
     assert "local thermal-moment closure" in result.stop_reason
+
+
+def test_local_failure_reports_the_specific_physical_gate():
+    def invalid(_match):
+        return dict(
+            ledger={"sources": np.zeros(5)}, moment_rate=0.,
+            weak_budget_scaled_error=0., minimum_chi_species=-.2,
+            minimum_chi_momentum=.3, edge_gradient_defects={"heat": 0.},
+            family=SimpleNamespace(maximum_scaled_residual=0.),
+            incoming=True, positive_diffusion=False,
+            maximum_outward_mass=-.1, curvature_half_width=.01, valid=False,
+        )
+    result = FluxSpaceThermalMomentMarch(
+        _IdentityInverter(), thermal_species_ratio=1.,
+        mechanical_work="reduced_buoyancy_work", local_evaluator=invalid,
+    ).march(np.zeros(8), .01, step=.01)
+    assert "chi=(-2.000e-01,3.000e-01)" in result.stop_reason
+
+
+def test_flux_trajectory_interpolates_parameters_and_queries_receptors(section):
+    first = encode_section(
+        np.array([1.13, .15, .02, .01, 25., 1., 1.5]), 1.02,
+    )
+    second = first.copy()
+    second[[0, 1, 2, 4, 7]] += np.log([1.01, .99, 1.02, .98, 1.03])
+    second[5:7] = [2., 1.6]
+    trajectory = ThermalMomentFluxTrajectory(
+        section.jetplume, section.thermodynamics, [second, first],
+    )
+    middle = trajectory.parameters_at(1.5)
+    assert middle == pytest.approx(.5*(first+second))
+    state, model = trajectory._section_at(1.5)
+    assert trajectory.state_at(1.5) == pytest.approx(state)
+    assert trajectory.temperature_at(1.5, 0., 1.5) == pytest.approx(
+        model.point_temperature(state, 0., 1.5)
+    )
+    assert trajectory.concentration_at(1.5, 0., 1.5) == pytest.approx(
+        100.*model.point_mole_fraction(state, 0., 1.5)
+    )
+    assert trajectory.parameters_at(2.+5e-9) == pytest.approx(second)
+    assert trajectory.parameters_at(2.+2e-8) is None
+    assert trajectory.state_at(.9) is None
+
+
+def test_flux_trajectory_rejects_nonunique_downwind_coordinates(section):
+    parameters = np.zeros((2, 8))
+    parameters[:, 5] = 1.
+    with pytest.raises(ValueError, match="increase strictly"):
+        ThermalMomentFluxTrajectory(
+            section.jetplume, section.thermodynamics, parameters,
+        )

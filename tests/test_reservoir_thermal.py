@@ -56,6 +56,23 @@ def test_five_sources_and_weak_heat_moments_are_consistent(reservoir):
     assert out["edge_gradient_defects"]["heat"] > 1e-3
 
 
+def test_radial_core_limits_constitutive_gate_without_changing_global_budgets(mixing):
+    full = ReservoirThermalMoments(
+        mixing, thermal_species_ratio=1.,
+        mechanical_work="reduced_buoyancy_work", positivity_domain="full_square",
+    ).evaluate()
+    core = ReservoirThermalMoments(
+        mixing, thermal_species_ratio=1.,
+        mechanical_work="reduced_buoyancy_work", positivity_domain="radial_core",
+    ).evaluate()
+    assert core["positivity_domain"] == "radial_core"
+    assert core["ledger"]["sources"] == pytest.approx(full["ledger"]["sources"])
+    assert core["moment_rate"] == pytest.approx(full["moment_rate"])
+    assert core["minimum_chi_species"] >= full["minimum_chi_species"]
+    assert core["minimum_chi_momentum"] >= full["minimum_chi_momentum"]
+    assert core["minimum_corner_chi_momentum"] is not None
+
+
 def test_direct_four_face_reservoir_flux_and_second_moment(reservoir):
     m, order = reservoir.mixing, 128
     result = reservoir.evaluate()
@@ -89,6 +106,14 @@ def test_sources_and_boundary_refine_without_changing_phase_table(reservoir):
 def test_unsupported_physics_choices_are_rejected(mixing, ratio, work):
     with pytest.raises(ValueError):
         ReservoirThermalMoments(mixing, thermal_species_ratio=ratio, mechanical_work=work)
+
+
+def test_unsupported_positivity_domain_is_rejected(mixing):
+    with pytest.raises(ValueError, match="positivity domain"):
+        ReservoirThermalMoments(
+            mixing, thermal_species_ratio=1.,
+            mechanical_work="reduced_buoyancy_work", positivity_domain="corners",
+        )
 
 
 def test_missing_choices_and_ground_cannot_silently_enable_driver(mixing):

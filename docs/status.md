@@ -1,5 +1,20 @@
 # degali — project status
 
+> **2026-09-10 local latest — matched-sensor thermal-moment decision:** the
+> direct six-flux candidate now reaches x=4.00 m for PRESLHY Trials 10 and 23
+> at both 0.005/0.0025 m steps under the preregistered `radial_core`
+> constitutive-validity option. Full-square conserved integrals and side fluxes
+> are retained; only the complete-contour local diffusivity gate is restricted
+> to q<=q0. Maximum independent balance is `6.79e-11`, terminal state/flux
+> differences are `2.89e-5`/`6.91e-5`, and the 40-sensor refinement difference
+> is `3.53e-4`. Numerics pass, but field acceptance fails: thermal-variance
+> median log error improves `0.26833→0.25146` while centre-amplitude error
+> worsens `0.17924→0.19070`. No coefficient was fitted, neither the candidate
+> nor `radial_core` is promoted, and `full_square` remains default. The thermal
+> width collapses near the species width, identifying the instantaneous
+> shear-to-enthalpy/unity-diffusivity closure—not step error—as the next
+> boundary. Read `thermal-moment-observation-results.md`.
+
 > **2026-09-10 local latest — six-trial direct-flux thermal extension:** the
 > independent Gaussian-enthalpy path now solves the established width geometry
 > analytically instead of using the legacy `1e-4` Brent width root. The core

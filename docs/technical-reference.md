@@ -454,6 +454,7 @@ pytest -q
 - [유한 TKE 결과](finite-tke-transport-results.md)
 - [열폭 수송 요구조건](thermal-width-transport-requirements.md)
 - [열모멘트 플럭스 확장 결과](thermal-moment-flux-extension-results.md)
+- [열모멘트 동일센서 관측 결과](thermal-moment-observation-results.md)
 - [공개 범위](publication-scope.md)
 
 ## 14. 최종 기술 판정

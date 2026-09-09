@@ -1,5 +1,21 @@
 # Handover
 
+> **LATEST 2026-09-10 — identical-sensor thermal-moment audit complete, no
+> promotion:** A physically scoped `radial_core` option now evaluates the
+> complete-contour diffusivity identity only for q<=q0 while leaving every
+> full-square conserved integral, corner/side flux and source unchanged. This
+> resolves Trial 10's one-corner constitutive-domain stop without clipping a
+> negative coefficient. Trials 10/23 both reach x=4 m at .005/.0025 m, maximum
+> independent balance is 6.79e-11 and the 40-sensor refinement difference is
+> 3.53e-4. The observation gate nevertheless fails: thermal variance log error
+> improves .26833→.25146, but centre-amplitude error worsens .17924→.19070.
+> Keep `full_square` default and do not tune `D_h/D_C`. Read
+> `thermal-moment-observation-results.md`. The existing finite-TKE operator is
+> the relevant structural next branch, but PRESLHY supplies no k, epsilon,
+> Reynolds stress or velocity-RMS boundary; obtain independent turbulence data
+> or run only explicitly non-promotable end-member sensitivities. GitHub push
+> remains deferred.
+
 > **LATEST 2026-09-10 — analytic-width six-trial thermal-flux extension:**
 > The retained Trial 12/24 failures were traced to `jetplume._split` using a
 > `1e-4` absolute Brent tolerance inside a section inverse operating at much

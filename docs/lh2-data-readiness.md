@@ -1,6 +1,6 @@
 # LH2 data readiness for the next model stage
 
-Last reviewed: 2026-09-08
+Last reviewed: 2026-09-10
 
 This register separates data that can constrain the model from material that
 is useful only for context or bounds. Third-party raw files are kept under the
@@ -133,13 +133,21 @@ Reynolds-stress and `epsilon` profiles has not been located.
 
 ## 5. Implementation consequence
 
-The next DEGALI step can proceed without another bulk download. The source
-boundary has been reconciled with the D4.8 flow hierarchy, so the next new
-work is the downstream temperature, density, buoyancy and energy residual
-analysis for PRESLHY Trials 10 and 23. A transported-TKE or finite-relaxation parameter
-must not be fitted until an independent velocity/TKE or particle-slip datum is
-obtained. Until then, such physics should be implemented as a bounded
-sensitivity branch and reported as structurally unvalidated.
+The source-boundary reconciliation and the coefficient-free thermal-moment
+observation test are now complete. The latter is numerically converged through
+4 m but improves thermal variance while worsening centre amplitude; see
+[`thermal-moment-observation-results.md`](thermal-moment-observation-results.md).
+Further thermal-width tuning from the same four profiles would be calibration,
+not independent validation.
+
+The next physically identified DEGALI step now does require new evidence: a
+matched cryogenic-hydrogen mean-velocity and turbulence profile that constrains
+initial `rho*u*k`, Reynolds stress and a dissipation time or epsilon. A finite-
+TKE end-member screen can be performed without it, but must remain an explicit
+bounded sensitivity and cannot support a field-accuracy or default-promotion
+claim. Likewise, finite condensed-air relaxation requires an independent
+particle-size or slip datum rather than a coefficient inferred only from plume
+temperature.
 
 The D4.8 source comparison has now been completed; see
 [`d48-source-boundary-reconciliation-results.md`](d48-source-boundary-reconciliation-results.md).

@@ -49,14 +49,18 @@ class _PhaseForceView:
 
 
 class ReservoirThermalMoments:
-    def __init__(self, mixing, *, thermal_species_ratio, mechanical_work):
+    def __init__(self, mixing, *, thermal_species_ratio, mechanical_work,
+                 positivity_domain="full_square"):
         if mechanical_work != "reduced_buoyancy_work":
             raise ValueError("explicitly select the reduced buoyancy-work energy convention")
         if not math.isfinite(thermal_species_ratio) or thermal_species_ratio <= 0.:
             raise ValueError("specify a positive finite thermal/species diffusivity ratio")
         if mixing.section.energy_transport != "total" or mixing.section.ground_interaction != "free":
             raise NotImplementedError("reservoir moments require a free total-energy section")
+        if positivity_domain not in ("full_square", "radial_core"):
+            raise ValueError("positivity domain must be 'full_square' or 'radial_core'")
         self.mixing, self.ratio = mixing, thermal_species_ratio
+        self.positivity_domain = positivity_domain
         self.shear = ReducedShearThermal(mixing, axial_force_density=self.axial_force_density)
 
     def axial_force_density(self, q, data):
@@ -106,7 +110,11 @@ class ReservoirThermalMoments:
         b = self.budgets(family, order=order)
         gamma = affine_root(b["weak_second_residual"])
         at, rates = np.array([1., gamma]), family.at(gamma)
-        q = np.unique(np.r_[np.linspace(0., p.qmax, probes), .5*(p.knots[:-1]+p.knots[1:])])
+        q_limit = p.qmax if self.positivity_domain == "full_square" else p.q0
+        midpoints = .5*(p.knots[:-1]+p.knots[1:])
+        q = np.unique(np.r_[
+            np.linspace(0., q_limit, probes), midpoints[midpoints < q_limit],
+        ])
         d = self.shear.radial_fields(q, family, thermal_species_ratio=self.ratio, order=order)
         chi_c, chi_p = d["chi_species"]@at, d["chi_momentum"]@at
         edge = self.edge_fields(np.linspace(p.q0, p.qmax, max(129, (probes+1)//2)), family, order=order)
@@ -131,9 +139,22 @@ class ReservoirThermalMoments:
         defects = dict(heat=float(np.max(abs(edge["enthalpy_gradient_defect"]@at)/hscale)),
             species=float(np.max(abs(edge["species_gradient_defect"]@at)/cscale)),
             momentum=float(np.max(abs(edge["axial_momentum_gradient_defect"]@at)/pscale)))
+        corner = np.array([], float)
+        if self.positivity_domain == "radial_core":
+            corner_q = np.unique(np.r_[
+                np.linspace(p.q0, p.qmax, max(65, (probes+1)//2)),
+                midpoints[midpoints > p.q0],
+            ])
+            corner_fields = self.shear.radial_fields(
+                corner_q, family, thermal_species_ratio=self.ratio, order=order,
+            )
+            corner = corner_fields["chi_momentum"]@at
         return dict(ledger=ledger, family=family, budgets=b, scalar_budgets=scalar, gamma=gamma,
             rates=rates, moment_rate=float(moment_rate), weak_budget_scaled_error=float(error),
             minimum_chi_species=float(min(chi_c)), minimum_chi_momentum=float(min(chi_p)),
+            positivity_domain=self.positivity_domain,
+            minimum_corner_chi_momentum=(None if not len(corner) else float(min(corner))),
+            negative_corner_momentum_samples=int(np.count_nonzero(corner < 0.)),
             maximum_outward_mass=float(max(fm)), incoming=incoming, positive_diffusion=positive,
             curvature_half_width=float(curvature), edge_gradient_defects=defects, valid=valid)
 
@@ -141,12 +162,15 @@ class ReservoirThermalMoments:
 class ReservoirShortSegment:
     """Opt-in research driver; not the default plume/receptor implementation."""
     def __init__(self, jetplume, thermodynamics, *, thermal_species_ratio, mechanical_work,
-                 phase_interpolation="linear"):
+                 phase_interpolation="linear", positivity_domain="full_square"):
         self.jp, self.th = jetplume, thermodynamics
         self.ratio, self.work = thermal_species_ratio, mechanical_work
         if phase_interpolation not in ("linear", "c1_hermite"):
             raise ValueError("phase interpolation must be 'linear' or 'c1_hermite'")
+        if positivity_domain not in ("full_square", "radial_core"):
+            raise ValueError("positivity domain must be 'full_square' or 'radial_core'")
         self.phase_interpolation = phase_interpolation
+        self.positivity_domain = positivity_domain
 
     def evaluate(self, parameters, *, order=8, probes=257):
         state, beta = decode_section(parameters)
@@ -156,7 +180,10 @@ class ReservoirShortSegment:
         )
         mixing = ConservativeTransverseMixing(section, state)
         result = ReservoirThermalMoments(mixing, thermal_species_ratio=self.ratio,
-                                         mechanical_work=self.work).evaluate(order=order, probes=probes)
+                                         mechanical_work=self.work,
+                                         positivity_domain=self.positivity_domain).evaluate(
+                                             order=order, probes=probes,
+                                         )
         if not result["valid"]:
             raise ValueError("short segment left the valid weak closure / inflow / diffusion domain")
         result["mixing"] = mixing

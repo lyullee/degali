@@ -64,6 +64,13 @@ conservation, solvability and step-convergence result—not a new field-accuracy
 score or safety-design validation. See the
 [thermal-moment extension results](docs/thermal-moment-flux-extension-results.md).
 
+A subsequent identical-sensor audit for Trials 10 and 23 reaches 4 m with
+strong conservation and step convergence under an opt-in complete-radial-core
+constitutive check. It slightly improves thermal spread but worsens centre
+temperature-deficit amplitude, so the field-acceptance gate fails and neither
+the candidate nor the new domain option is promoted. See the
+[thermal-moment observation result](docs/thermal-moment-observation-results.md).
+
 See [model status](docs/stage1-results-2026-09-06.md),
 [claim grading](docs/claim-grading.md), and
 [data/reproduction notes](docs/DATA_AND_REPRODUCTION.md). The current

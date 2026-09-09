@@ -39,6 +39,39 @@ def test_distinct_gaussians_obey_independent_analytic_enthalpy_integral(section)
     assert moment[5] == pytest.approx(section.buoyancy_force(STATE), rel=1e-12)
 
 
+def test_ground_image_superposes_species_and_enthalpy_before_phase_inversion(section):
+    section.thermal_width_ratio = 1.08
+    lateral, height = .05, .2
+    rho, y, temperature, enthalpy = section._receptor(STATE, lateral, height)
+    sy, sz = section.section_widths(STATE)
+    qy = .5*(lateral/sy)**2
+    qd = .5*((height-STATE[6])/sz)**2
+    qi = .5*((height+STATE[6])/sz)**2
+    power = 1./section.thermal_width_ratio**2
+    centre_c = STATE[0]*STATE[1]
+    centre_h = section.phase_inverse.enthalpy_and_slope(STATE[0], centre_c)[0]
+    expected_c = centre_c*np.exp(-qy)*(np.exp(-qd)+np.exp(-qi))
+    expected_h = centre_h*np.exp(-power*qy)*(
+        np.exp(-power*qd)+np.exp(-power*qi)
+    )
+    assert rho*y == pytest.approx([expected_c], rel=1e-12)
+    assert enthalpy == pytest.approx([expected_h], rel=1e-12)
+    represented_temperature, represented_h = section.thermodynamics._condensed_air_state(rho, y)
+    assert temperature == pytest.approx(represented_temperature, rel=1e-10)
+    assert enthalpy == pytest.approx(represented_h, rel=1e-8, abs=1e-8)
+
+
+def test_unit_width_ground_image_matches_the_existing_enthalpy_receptor(section, candidate):
+    section.thermal_width_ratio = 1.
+    for lateral, height in ((0., 1.5), (.05, .2), (.1, 1.8)):
+        assert section.point_temperature(STATE, lateral, height) == pytest.approx(
+            candidate.point_temperature(STATE, lateral, height), rel=1e-10,
+        )
+        assert section.point_mole_fraction(STATE, lateral, height) == pytest.approx(
+            candidate.point_mole_fraction(STATE, lateral, height), rel=1e-10,
+        )
+
+
 def test_synthetic_six_moment_boundary_closes(section):
     known = STATE.copy()
     known[:2] = 1.25, .1537  # Away from interpolation knots and neutral force.
@@ -106,7 +139,7 @@ def test_invalid_thermal_width_is_rejected(section, value):
         section.thermal_width_ratio = value
 
 
-@pytest.mark.parametrize("method", ["solve", "derivatives", "source_terms", "_match_flux_array", "_receptor", "project"])
+@pytest.mark.parametrize("method", ["solve", "derivatives", "source_terms", "_match_flux_array", "project"])
 def test_unclosed_transport_and_five_constraint_shortcut_are_blocked(section, method):
     with pytest.raises(NotImplementedError):
         getattr(section, method)(STATE)
