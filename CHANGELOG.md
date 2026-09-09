@@ -2,6 +2,13 @@
 
 ## Unreleased - GitHub alpha snapshot
 
+- Added a pre-registered classical-RK4 path that transports total mass,
+  hydrogen mass, vector momentum, total energy and the physical thermal second
+  moment directly, reconstructing a bounded physical section at every stage.
+  Trial 10 reaches x=1.78 m at both 0.005/0.0025 m steps; independent order-16
+  balance errors are below `4.35e-11`, and terminal state/flux differences are
+  below `1.23e-4`. This removes the prior state-space accumulation error without
+  fitting a new diffusivity or promoting the research closure to a default.
 - Added a guarded adaptive downstream marcher for the opt-in conservative
   thermal second-moment state. Trial 10 reaches the first profile station and
   passes step-result convergence, but both independent long-range balance
