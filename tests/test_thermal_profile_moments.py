@@ -3,6 +3,7 @@ import pytest
 
 from degali.validation.thermal_profile_moments import (
     best_integer_lag,
+    project_model_profile,
     summarize_paired_profile_moments,
     truncated_profile_moment,
 )
@@ -65,3 +66,47 @@ def test_summary_keeps_negative_growth_and_requires_common_delay():
     assert result["growth_summary"]["thermal_positive"] > 0
     assert result["growth_summary"]["species_nonpositive"] > 0
     assert result["growth_summary"]["median_ratio"] < 0.0
+
+
+class _FakeTrajectory:
+    class model:
+        class thermodynamics:
+            ambient_temperature = 300.0
+
+    def __init__(self, *, covered=True, invalid_hydrogen=False):
+        self.covered = covered
+        self.invalid_hydrogen = invalid_hydrogen
+        self.sampled_heights = []
+
+    def state_at(self, station):
+        return np.ones(7) if self.covered and station == 4.0 else None
+
+    def temperature_at(self, station, lateral, height):
+        self.sampled_heights.append(height)
+        offset = height - 1.5
+        return 300.0 - 20.0 * np.exp(-0.5 * (offset / 0.25) ** 2)
+
+    def concentration_at(self, station, lateral, height):
+        if self.invalid_hydrogen:
+            return 101.0
+        offset = height - 1.5
+        return 10.0 * np.exp(-0.5 * (offset / 0.20) ** 2)
+
+
+def test_project_model_profile_uses_absolute_sensor_heights_and_direct_moments():
+    trajectory = _FakeTrajectory()
+    result = project_model_profile(trajectory, 4.0, 1.5)
+    assert result.absolute_height == pytest.approx([1.0, 1.25, 1.5, 1.75, 2.0])
+    assert trajectory.sampled_heights == pytest.approx(result.absolute_height)
+    assert result.thermal_deficit[2] == pytest.approx(20.0)
+    assert result.hydrogen[2] == pytest.approx(10.0)
+    assert result.thermal_moment.variance > result.hydrogen_moment.variance
+
+
+def test_project_model_profile_rejects_missing_or_nonphysical_receptor():
+    with pytest.raises(ValueError, match="does not cover"):
+        project_model_profile(_FakeTrajectory(covered=False), 4.0, 1.5)
+    with pytest.raises(ValueError, match="physical range"):
+        project_model_profile(_FakeTrajectory(invalid_hydrogen=True), 4.0, 1.5)
+    with pytest.raises(ValueError, match="below ground"):
+        project_model_profile(_FakeTrajectory(), 4.0, 0.25)

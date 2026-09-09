@@ -2,6 +2,21 @@
 
 ## Unreleased - GitHub alpha snapshot
 
+- Added a guarded adaptive downstream marcher for the opt-in conservative
+  thermal second-moment state. Trial 10 reaches the first profile station and
+  passes step-result convergence, but both independent long-range balance
+  checks fail the preregistered limit. No receptor score or promotion is made;
+  direct six-flux/moment marching is the next required numerical path.
+- Added a pre-registered Trial 10 measured-wind displacement audit using the
+  identical five-sensor thermal/H2 operator. Directional yaw reduces all four
+  centre/load errors but increases both variance errors; magnitude-only and
+  full-vector paths also fail the componentwise gate. The 0.02/0.01 m vector
+  result is converged, so no wind/default path is promoted.
+- Added an identical five-sensor model/measurement profile gate. Stored model
+  trajectories are now compared with observed thermal and hydrogen centre
+  amplitudes and finite-window variances without reintegration or coefficient
+  fitting. The tested same-width enthalpy path improves variance slightly but
+  worsens centre amplitude, so it is not promoted.
 - Added a pre-registered, coefficient-free observation operator for collocated
   PRESLHY Trial 10/23 temperature-deficit and hydrogen profiles. The public
   code computes finite five-sensor zeroth/centroid/second moments and lag

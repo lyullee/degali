@@ -1,5 +1,42 @@
 # Handover
 
+> **LOCAL NEXT 2026-09-08 — conservative thermal-moment downstream reach:**
+> The guarded Trial 10 state-space march reaches the first profile station
+> from x=.79661 to x=1.78414 m; the half-step run reaches x=1.78074 m. Terminal
+> parameter/value differences .001907/.003600 pass the .005 convergence gate,
+> and all local weak/positive-diffusion/inflow gates remain valid. However,
+> independent six-balance residuals are 9.206e-4 and 7.465e-4, both above the
+> preregistered 5e-4 reach limit. No receptor score or promotion. Read
+> `thermal-moment-downstream-reach-results.md`. Next: integrate the six physical
+> flux/moment values directly and invert them to section state at every RK stage;
+> do not lower the balance limit or correct the residual after marching.
+
+> **LOCAL NEXT 2026-09-08 — measured-wind displacement separated from
+> intrinsic spreading:** Stored Trial 10 yaw/magnitude/vector trajectories were
+> projected through the exact five-sensor operator. Direction-only yaw improves
+> all four amplitude/load median log errors (thermal centre 31.4%, thermal M0
+> 18.8%, H2 centre 13.3%, H2 M0 5.0%) but worsens thermal/H2 variance errors
+> 36.7%/25.0%; all wind cells therefore fail the preregistered gate. Vector
+> step .02/.01 converges at max 1.551e-4 versus the .005 limit, so this is not
+> integration-step error. Read `wind-vector-profile-observation-results.md`.
+> Next: specify and implement an opt-in conservative thermal second-moment
+> state, keeping enthalpy M0 and wind displacement separate and fitting no
+> coefficient. Local changes remain intentionally uncommitted/unpushed.
+
+> **LOCAL NEXT 2026-09-08 — identical model/measurement profile operator:**
+> Stored density-control and same-width enthalpy trajectories were projected at
+> the exact Trial 10/23 five-point vertical crosses without reintegration. The
+> enthalpy path slightly improves thermal-variance median log error
+> 0.26833→0.25256 but worsens centre-deficit error 0.17924→0.18999; it fails the
+> pre-registered componentwise dominance gate. All model thermal widths are
+> already 1.026--1.252 times observed. Trial 10 at 4 m instead has thermal M0
+> 2.30--2.40× and H2 M0 7.67--7.84× observed, so a width-only diffusivity change
+> is contraindicated. Read `model-thermal-profile-observation-results.md`.
+> Next: project the already stored measured-wind-vector/yaw trajectories through
+> this same operator to separate lateral displacement from intrinsic thermal
+> spreading; do not reintegrate or fit a yaw to temperature. Local changes are
+> intentionally not committed/pushed until the user requests a batch update.
+
 > **LATEST 2026-09-08 — paired thermal/species observation operator:**
 > Official PRESLHY E3.5 Trial 10/23 workbooks were reduced read-only at the
 > collocated x=1.78/4.00 m, y=0, five-point vertical crosses. The calculation

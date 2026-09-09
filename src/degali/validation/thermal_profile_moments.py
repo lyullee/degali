@@ -50,6 +50,20 @@ class LagEstimate:
     samples: int
 
 
+@dataclass(frozen=True)
+class ModelProfileProjection:
+    station: float
+    release_height: float
+    coordinate: np.ndarray
+    absolute_height: np.ndarray
+    ambient_temperature: float
+    temperature: np.ndarray
+    thermal_deficit: np.ndarray
+    hydrogen: np.ndarray
+    thermal_moment: TruncatedProfileMoment
+    hydrogen_moment: TruncatedProfileMoment
+
+
 def truncated_profile_moment(coordinate, scalar) -> TruncatedProfileMoment:
     """Return zeroth, centroid and central second moment on a finite line."""
     z = np.asarray(coordinate, dtype=float)
@@ -68,6 +82,82 @@ def truncated_profile_moment(coordinate, scalar) -> TruncatedProfileMoment:
     if variance < -1.0e-14:
         raise ValueError("negative profile variance")
     return TruncatedProfileMoment(zeroth, centre, max(variance, 0.0))
+
+
+def project_model_profile(
+    trajectory,
+    station: float,
+    release_height: float,
+    *,
+    coordinate=_OFFSETS,
+    thermal_centre_gate: float = 5.0,
+    hydrogen_centre_gate: float = 1.0,
+) -> ModelProfileProjection:
+    """Sample a steady trajectory with the finite observed-profile operator.
+
+    The supplied coordinates are relative to the experimental release axis,
+    while the trajectory receptor API uses absolute height above ground.  This
+    conversion is intentionally part of the observation operator.
+    """
+    station = float(station)
+    release_height = float(release_height)
+    z = np.asarray(coordinate, dtype=float)
+    gates = (float(thermal_centre_gate), float(hydrogen_centre_gate))
+    if (
+        not math.isfinite(station)
+        or station <= 0.0
+        or not math.isfinite(release_height)
+        or release_height < 0.0
+        or z.ndim != 1
+        or z.size < 3
+        or not np.all(np.isfinite(z))
+        or np.any(np.diff(z) <= 0.0)
+        or not all(math.isfinite(gate) and gate >= 0.0 for gate in gates)
+    ):
+        raise ValueError("finite station, release height, coordinates and gates required")
+    centre = int(np.argmin(np.abs(z)))
+    if abs(z[centre]) > 1.0e-12:
+        raise ValueError("profile coordinates must contain the release-axis centre")
+    if not hasattr(trajectory, "state_at") or trajectory.state_at(station) is None:
+        raise ValueError("trajectory does not cover the requested station")
+    try:
+        ambient = float(trajectory.model.thermodynamics.ambient_temperature)
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError("trajectory must expose a finite ambient temperature") from error
+    absolute = release_height + z
+    if np.any(absolute < 0.0):
+        raise ValueError("model receptor heights cannot be below ground")
+    temperature = np.asarray([
+        trajectory.temperature_at(station, 0.0, height) for height in absolute
+    ], dtype=float)
+    hydrogen = np.asarray([
+        trajectory.concentration_at(station, 0.0, height) for height in absolute
+    ], dtype=float)
+    if (
+        not math.isfinite(ambient)
+        or ambient <= 0.0
+        or not np.all(np.isfinite(temperature))
+        or np.any(temperature <= 0.0)
+        or not np.all(np.isfinite(hydrogen))
+        or np.any(hydrogen < 0.0)
+        or np.any(hydrogen > 100.0)
+    ):
+        raise ValueError("model receptor profile is outside its physical range")
+    thermal = np.maximum(ambient - temperature, 0.0)
+    if thermal[centre] < gates[0] or hydrogen[centre] < gates[1]:
+        raise ValueError("model profile does not pass the frozen centre signal gates")
+    return ModelProfileProjection(
+        station=station,
+        release_height=release_height,
+        coordinate=z.copy(),
+        absolute_height=absolute,
+        ambient_temperature=ambient,
+        temperature=temperature,
+        thermal_deficit=thermal,
+        hydrogen=hydrogen,
+        thermal_moment=truncated_profile_moment(z, thermal),
+        hydrogen_moment=truncated_profile_moment(z, hydrogen),
+    )
 
 
 def best_integer_lag(upstream, downstream, *, maximum_seconds: int = 5) -> LagEstimate:
@@ -358,8 +448,10 @@ def summarize_paired_profile_moments(data: dict) -> dict:
 
 __all__ = [
     "LagEstimate",
+    "ModelProfileProjection",
     "TruncatedProfileMoment",
     "best_integer_lag",
+    "project_model_profile",
     "read_paired_profiles",
     "summarize_paired_profile_moments",
     "truncated_profile_moment",

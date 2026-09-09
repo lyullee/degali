@@ -1,5 +1,37 @@
 # degali — project status
 
+> **2026-09-08 local latest — thermal-moment reach:** the opt-in Trial 10
+> conservative thermal-width state reaches x=1.78 m in both guarded step runs.
+> Terminal state/value refinement differences pass the .005 gate and no local
+> phase/positive-diffusion/inflow condition fails. Long-range independent
+> six-balance residuals remain 9.206e-4 and 7.465e-4, above the frozen 5e-4
+> limit, so no receptor score or model promotion is allowed. The next numerical
+> implementation must march the six flux/moment values directly and invert to
+> physical section state at each RK stage. GitHub remains deferred.
+
+> **2026-09-08 local latest — measured-wind profile observation:** Trial 10's
+> stored direction-only yaw improves all four centre/load summaries relative to
+> the planar control, but thermal and H2 variance errors worsen. The full
+> measured vector has the same trade-off; magnitude alone is mostly worse. No
+> wind path passes the preregistered displacement gate and no default changes.
+> The .02/.01 m vector profiles converge at max relative difference 1.551e-4,
+> far below the .005 limit. This identifies lateral displacement as a partial
+> amplitude mechanism, not a vertical-spreading closure. Next local stage is an
+> opt-in conservative thermal second-moment state with no fitted coefficient.
+> GitHub remains deferred for a later batch update.
+
+> **2026-09-08 local latest — model projected through identical five-sensor
+> operator:** density-control versus same-width enthalpy gives thermal centre
+> median absolute log error 0.17924 versus 0.18999, and thermal-variance error
+> 0.26833 versus 0.25256. Because amplitude worsens while variance improves,
+> the enthalpy path does not dominate and no default changes. All eight model
+> thermal widths are already above their observed medians. Trial 10 at 4 m has
+> a much larger scalar-load mismatch (thermal finite-line M0 2.30--2.40× and
+> H2 M0 7.67--7.84×), so a width-only closure is rejected. Next local gate is
+> the same observation of stored measured-wind-vector/yaw fields, followed by
+> a conservative thermal second-moment state only if displacement cannot
+> explain the amplitude residual. No GitHub commit/push requested for this batch.
+
 > **2026-09-08 latest — observed thermal/species profile moments:** a new
 > coefficient-free observation operator pairs the official PRESLHY Trial 10/23
 > temperature and H2 signals at x=1.78/4.00 m on the same five vertical points.
