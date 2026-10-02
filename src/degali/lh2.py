@@ -48,6 +48,11 @@ depends on, not against the integration limit: asking about 30 m and
 integrating to 100 m is one question, and warning about the 100 m is an answer
 to a question nobody asked.
 
+For a safety-critical caller, ``assess(..., strict_scope=True)`` converts that
+warning into :class:`ApplicabilityError`.  ``assess_envelope`` evaluates
+caller-supplied source-rate and wind bounds without fitting a correction or
+pretending they are a statistical confidence interval.
+
 It will also not give a defensible *concentration* for a release the wind
 steers rather than its own momentum.  On the PRESLHY 1 barg trials, where the
 exit velocity is 4 to 13 m/s against a 1.5 to 4 m/s wind, nominally identical
@@ -60,7 +65,8 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING
+from itertools import product
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
 
@@ -72,6 +78,7 @@ if TYPE_CHECKING:
     )
     from .addons.notional import MeasuredThroatExpansion
     from .core.jetplume import JetPlume, JetResult
+    from .addons.transient_receptor import WindHistory
 
 from .evidence import (
     LIFTOFF_HEIGHT,
@@ -85,6 +92,22 @@ from .evidence import (
 LFL = 0.04
 UFL = 0.75
 STOICHIOMETRIC = 0.295
+
+
+class ApplicabilityError(ValueError):
+    """The requested LH2 result is outside the evidence-backed scope.
+
+    :func:`assess` remains warning-based by default for backwards
+    compatibility.  Applications that must not consume an out-of-scope
+    number can pass ``strict_scope=True`` or call
+    :meth:`Assessment.require_screening_scope` explicitly.
+    """
+
+    def __init__(self, warnings: list[str] | tuple[str, ...]):
+        self.warnings = tuple(warnings)
+        message = "LH2 screening request is outside the validated scope:\n- "
+        message += "\n- ".join(self.warnings)
+        super().__init__(message)
 
 
 @dataclass(frozen=True)
@@ -347,6 +370,175 @@ class LH2CoupledResearchResult:
                 "path failed conservation or applicability screening"
             )
         return self.handoff.run(distmx=distmx, tol=tol, smax=smax)
+
+
+@dataclass
+class LH2YawedCrosswindResearchResult:
+    """Research-only arbitrary-bearing LH2 crosswind trajectory.
+
+    This wraps the existing six-flux yaw kernel.  It is intentionally not
+    merged into :func:`assess`: arbitrary release bearings need a genuinely
+    three-dimensional near field and have no direct LH2 validation score in
+    the present portfolio.  The object therefore exposes the trajectory and
+    its applicability warnings while keeping ``validated`` false.
+    """
+
+    model: object
+    trajectory: object
+    wind_angle_rad: float
+    release_angle_rad: float
+    source_velocity_ratio: float
+    applicability_failures: list[str] = field(default_factory=list)
+    validated: bool = False
+    raw_result: object | None = field(default=None, repr=False)
+
+    @property
+    def accepted(self) -> bool:
+        """Whether the conservation/geometry run completed without a gate."""
+
+        return not self.applicability_failures
+
+    def report(self) -> str:
+        lines = [
+            "LH2 yawed crosswind research path",
+            f"  wind bearing (to)          : {self.wind_angle_rad:.6g} rad",
+            f"  release bearing (to)       : {self.release_angle_rad:.6g} rad",
+            f"  source velocity/wind ratio : {self.source_velocity_ratio:.6g}",
+            "  quantitative validation     : not established",
+        ]
+        if self.applicability_failures:
+            lines.append("  applicability failures:")
+            lines += [f"    - {reason}" for reason in self.applicability_failures]
+        return "\n".join(lines)
+
+
+@dataclass
+class LH2FiniteReleaseResearchResult:
+    """End-to-end steady-plume to native-puff finite LH2 calculation."""
+
+    steady: LH2YawedCrosswindResearchResult
+    handoff: object
+    puff: object
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def accepted(self) -> bool:
+        return (
+            self.handoff.status == "transition_ready"
+            and self.puff.maximum_relative_mass_residual < 1.0e-10
+            and self.puff.maximum_relative_hydrogen_residual < 1.0e-10
+            and not self.steady.applicability_failures
+        )
+
+    @property
+    def transition_position_m(self) -> tuple[float, float, float]:
+        return self.handoff.centre_position_m
+
+    def receptor_trace(self, point_m: Sequence[float]):
+        """Return the native-puff trace on the absolute source clock."""
+        from .addons.finite_puff import PuffReceptorTrace
+
+        trace = self.puff.receptor_trace(point_m)
+        return PuffReceptorTrace(
+            point_m=trace.point_m,
+            time_s=trace.time_s + self.handoff.source_duration_s,
+            mole_fraction=trace.mole_fraction,
+            temperature_k=trace.temperature_k,
+        )
+
+    def report(self) -> str:
+        final = self.puff.states[-1]
+        lines = [
+            "LH2 finite-release plume+puff research path",
+            f"  source duration             : {self.handoff.source_duration_s:.6g} s",
+            f"  transition arc length       : {self.handoff.transition_arc_length_m:.6g} m",
+            f"  transition centre           : {self.handoff.centre_position_m}",
+            f"  transition H2 inventory     : {self.handoff.hydrogen_mass_kg:.6g} kg",
+            f"  puff continuation           : {final.elapsed_s:.6g} s",
+            f"  final puff centre           : {final.centre_position_m}",
+            f"  final H2 mass fraction      : {final.bulk_hydrogen_mass_fraction:.6g}",
+            f"  puff mass residual          : {self.puff.maximum_relative_mass_residual:.3e}",
+            f"  puff H2 residual            : {self.puff.maximum_relative_hydrogen_residual:.3e}",
+            f"  execution screen            : {'pass' if self.accepted else 'conditional'}",
+        ]
+        if self.warnings or self.steady.applicability_failures:
+            lines.append("  qualifications:")
+            lines += [
+                f"    - {message}" for message in (
+                    self.steady.applicability_failures + self.warnings
+                )
+            ]
+        return "\n".join(lines)
+
+
+@dataclass
+class LH2RainoutPoolResearchResult:
+    """Post-flash droplets, rainout and concurrent fixed-footprint pool."""
+
+    source: object
+    droplets: object
+    pool_coupling: object
+    warnings: list[str] = field(default_factory=list)
+
+    @property
+    def source_partition_residual_kg_s(self) -> float:
+        return float(
+            self.source.mass_flow
+            - self.source.vapour_mass_flow
+            - self.source.liquid_mass_flow
+        )
+
+    @property
+    def accepted(self) -> bool:
+        accounted_mass = (
+            self.pool_coupling.direct_vapour_mass_kg
+            + self.pool_coupling.airborne_droplet_vapour_mass_kg
+            + self.pool_coupling.airborne_liquid_mass_kg
+            + self.pool_coupling.pool_vapour_mass_kg
+            + self.pool_coupling.remaining_pool_liquid_mass_kg
+            + self.pool_coupling.escaped_pool_liquid_mass_kg
+        )
+        return (
+            abs(self.source_partition_residual_kg_s)
+            <= 1.0e-10 * max(self.source.mass_flow, 1.0)
+            and abs(self.droplets.mass_residual_kg_s)
+            <= 1.0e-10 * max(self.droplets.inlet_liquid_mass_flow_kg_s, 1.0)
+            and abs(self.pool_coupling.hydrogen_mass_residual_kg)
+            <= 1.0e-10 * max(accounted_mass, 1.0)
+        )
+
+    def report(self) -> str:
+        pool = self.pool_coupling
+        lines = [
+            "LH2 post-flash droplet/rainout/pool research path",
+            f"  direct flash vapour rate    : {self.source.vapour_mass_flow:.6g} kg/s",
+            f"  injected liquid rate        : {self.source.liquid_mass_flow:.6g} kg/s",
+            f"  in-flight vapour rate       : {self.droplets.airborne_vapour_mass_flow_kg_s:.6g} kg/s",
+            f"  airborne liquid rate        : {self.droplets.airborne_liquid_mass_flow_kg_s:.6g} kg/s",
+            f"  ground rainout rate         : {self.droplets.ground_liquid_mass_flow_kg_s:.6g} kg/s",
+            f"  source partition residual   : {self.source_partition_residual_kg_s:.3e} kg/s",
+            f"  pool vapour mass            : {pool.pool_vapour_mass_kg:.6g} kg",
+            f"  remaining pool liquid       : {pool.remaining_pool_liquid_mass_kg:.6g} kg",
+            f"  domain-escaped pool liquid  : {pool.escaped_pool_liquid_mass_kg:.6g} kg",
+            f"  end-to-end H2 residual      : {pool.hydrogen_mass_residual_kg:.3e} kg",
+            f"  execution screen            : {'pass' if self.accepted else 'fail'}",
+        ]
+        if pool.pool is not None and hasattr(pool.pool, "solver_id"):
+            peak_front = max(
+                step.reported_radius_m for step in pool.pool.steps
+            )
+            peak_wet_area = max(step.wet_area_m2 for step in pool.pool.steps)
+            lines.extend((
+                f"  dynamic-pool solver         : {pool.pool.solver_id}",
+                f"  peak reported pool radius   : {peak_front:.6g} m",
+                f"  peak numerically wet area   : {peak_wet_area:.6g} m2",
+                f"  max pool ledger residual    : "
+                f"{pool.pool.maximum_absolute_mass_residual_kg:.3e} kg",
+            ))
+        if self.warnings:
+            lines.append("  qualifications:")
+            lines += [f"    - {warning}" for warning in self.warnings]
+        return "\n".join(lines)
 
 
 def audit_lh2_independent_energy_interface(
@@ -1239,6 +1431,605 @@ def run_lh2_crosswind_research(
     )
 
 
+def run_lh2_yawed_crosswind_research(
+    source: "AxisymmetricJetSource | LH2ExpandedSource",
+    *,
+    wind: float,
+    wind_angle: float = 0.0,
+    release_angle: float = 0.0,
+    height: float | None = None,
+    ambient_temperature: float = 295.0,
+    ambient_pressure: float = 101325.0,
+    relative_humidity: float = 0.0,
+    roughness: float = 0.001,
+    stability: str = "D",
+    averaging: float = 60.0,
+    wind_reference_height: float = 10.0,
+    maximum_nearfield_distance: float = 0.08,
+    minimum_mass_fraction: float = 7.0e-4,
+    radial_points: int = 81,
+    nearfield_maximum_step: float = 0.00025,
+    nearfield_relative_tolerance: float = 5.0e-8,
+    maximum_distance: float = 30.0,
+    maximum_step: float = 0.05,
+    stop_after_material_time_s: float | None = None,
+    strict_scope: bool = False,
+) -> LH2YawedCrosswindResearchResult:
+    """Integrate a yawed LH2 release with conserved horizontal momentum.
+
+    ``wind_angle`` and ``release_angle`` are global horizontal *to* bearings
+    in radians.  The calculation uses the existing six-flux yaw extension;
+    it is a research branch because the validated LH2 near-field path remains
+    aligned with the mean wind.  A reverse axial branch is rejected rather
+    than clipped.  ``strict_scope`` additionally rejects a source/wind ratio
+    below the momentum-dominated screen of ten.
+    """
+
+    from .addons.yawed_crosswind import YawedCrosswind, YawedTrajectory
+    from .core.jetplume import J_UC
+    from .validation.nearfield import hydrogen_gas_jet
+
+    values = (wind, wind_angle, release_angle, roughness, averaging,
+              wind_reference_height, maximum_nearfield_distance,
+              nearfield_maximum_step, maximum_distance, maximum_step)
+    if not all(math.isfinite(float(value)) for value in values):
+        raise ValueError("yawed LH2 inputs must be finite")
+    if wind <= 0.0 or maximum_distance <= 0.0 or maximum_step <= 0.0:
+        raise ValueError("wind, maximum_distance and maximum_step must be positive")
+    if roughness <= 0.0 or averaging <= 0.0 or wind_reference_height <= 0.0:
+        raise ValueError("roughness, averaging and wind_reference_height must be positive")
+
+    expanded = source if isinstance(source, LH2ExpandedSource) else None
+    source_plane = expanded.source if expanded is not None else source
+    if not math.isclose(source_plane.theta, 0.0, abs_tol=1.0e-10):
+        raise ValueError(
+            "yawed research currently requires a horizontal source plane "
+            "(theta=0)"
+        )
+    release_height = source_plane.y if height is None else float(height)
+    if release_height <= 0.0:
+        raise ValueError("yawed LH2 release height must be positive")
+    if not math.isclose(
+        math.cos(release_angle - wind_angle), 0.0, abs_tol=1.0e-14
+    ) and math.cos(release_angle - wind_angle) < 0.0:
+        raise ValueError(
+            "reverse axial yaw is unsupported; release must have a non-negative "
+            "component along the wind"
+        )
+
+    crosswind, initial = hydrogen_gas_jet(
+        rate=source_plane.fuel_mass_flow,
+        diameter=source_plane.diameter,
+        wind=wind,
+        height=release_height,
+        velocity=source_plane.velocity,
+        source_temperature=source_plane.temperature,
+        source_density=source_plane.density,
+        source_mass_fraction=source_plane.mass_fraction,
+        theta=0.0,
+        relative_humidity=relative_humidity,
+        ambient_temperature=ambient_temperature,
+        ambient_pressure=ambient_pressure,
+        roughness=roughness,
+        stability=stability,
+        averaging=averaging,
+        wind_reference_height=wind_reference_height,
+        sc=1.16**2,
+        density_scaled_entrainment=False,
+        momentum_entrainment_beta=0.28,
+        houf_entrainment=True,
+    )
+    local_wind = source_plane.velocity - float(initial[J_UC])
+    ratio = source_plane.velocity / local_wind if local_wind > 0.0 else math.inf
+    failures = []
+    if ratio < MOMENTUM_RATIO:
+        failures.append(
+            f"source velocity/wind ratio {ratio:.3f} is below the "
+            f"momentum-dominated limit {MOMENTUM_RATIO:g}"
+        )
+    if strict_scope and failures:
+        raise ApplicabilityError(failures)
+
+    near_field = run_lh2_near_field_research(
+        source,
+        ambient_temperature=ambient_temperature,
+        ambient_pressure=ambient_pressure,
+        relative_humidity=relative_humidity,
+        ambient_coflow_velocity=local_wind,
+        maximum_distance=maximum_nearfield_distance,
+        minimum_mass_fraction=minimum_mass_fraction,
+        radial_points=radial_points,
+        maximum_step=nearfield_maximum_step,
+        relative_tolerance=nearfield_relative_tolerance,
+    )
+    interface = audit_lh2_independent_energy_interface(
+        near_field, crosswind,
+        streamline_distance=maximum_nearfield_distance,
+        ground_interaction="free",
+    )
+    if not interface.accepted:
+        failures.extend(interface.failure_reasons)
+        if strict_scope:
+            raise ApplicabilityError(failures)
+    model = YawedCrosswind(interface.model, wind_angle=wind_angle)
+    state = model.lift(interface.state, yaw=release_angle)
+    # ``source_plane.x`` is the only global offset carried by the axisymmetric
+    # source; source_plane.y is the release elevation, represented by state Z.
+    state[7] += source_plane.x
+    result = model.solve(
+        state, distance=maximum_distance, step=maximum_step,
+        maximum_material_time_s=stop_after_material_time_s,
+    )
+    trajectory = YawedTrajectory(model, result["states"])
+    return LH2YawedCrosswindResearchResult(
+        model=model, trajectory=trajectory,
+        wind_angle_rad=float(wind_angle), release_angle_rad=float(release_angle),
+        source_velocity_ratio=float(ratio),
+        applicability_failures=failures,
+        raw_result=result,
+    )
+
+
+def run_lh2_finite_release_research(
+    source: "AxisymmetricJetSource | LH2ExpandedSource",
+    *,
+    source_duration_s: float,
+    puff_duration_s: float,
+    wind: float,
+    wind_angle: float = 0.0,
+    release_angle: float = 0.0,
+    height: float | None = None,
+    upstream_material_time_s: float = 0.0,
+    ambient_temperature: float = 295.0,
+    ambient_pressure: float = 101325.0,
+    relative_humidity: float = 0.0,
+    roughness: float = 0.001,
+    stability: str = "D",
+    averaging: float = 60.0,
+    wind_reference_height: float = 10.0,
+    maximum_nearfield_distance: float = 0.08,
+    minimum_mass_fraction: float = 7.0e-4,
+    radial_points: int = 81,
+    nearfield_maximum_step: float = 0.00025,
+    nearfield_relative_tolerance: float = 5.0e-8,
+    crosswind_maximum_distance: float | None = None,
+    crosswind_maximum_step: float = 0.05,
+    crosswind_step_retries: int = 2,
+    puff_time_step: float = 0.05,
+    hydrogen_flux_relative_tolerance: float = 1.0e-4,
+    puff_wind_history: "WindHistory | None" = None,
+    maximum_steady_wind_direction_span_deg: float = 20.0,
+    maximum_steady_wind_speed_range_fraction: float = 0.25,
+    strict_scope: bool = False,
+) -> LH2FiniteReleaseResearchResult:
+    """Run a finite LH2 release through jet, yawed plume and native puff.
+
+    The steady march is stopped as soon as its material clock brackets the
+    source duration.  It therefore uses a conservative upper distance without
+    paying the cost of marching to that distance.  The exact transition is
+    interpolated and continued by the three-dimensional finite-puff solver.
+    Receptor traces returned by the result use the absolute source clock.
+    """
+
+    for name, value in {
+        "source_duration_s": source_duration_s,
+        "puff_duration_s": puff_duration_s,
+        "wind": wind,
+        "crosswind_maximum_step": crosswind_maximum_step,
+        "puff_time_step": puff_time_step,
+        "hydrogen_flux_relative_tolerance": hydrogen_flux_relative_tolerance,
+        "maximum_steady_wind_direction_span_deg": (
+            maximum_steady_wind_direction_span_deg
+        ),
+        "maximum_steady_wind_speed_range_fraction": (
+            maximum_steady_wind_speed_range_fraction
+        ),
+    }.items():
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(f"{name} must be finite and positive")
+    if (
+        not math.isfinite(upstream_material_time_s)
+        or upstream_material_time_s < 0.0
+        or upstream_material_time_s >= source_duration_s
+    ):
+        raise ValueError(
+            "upstream material time must be non-negative and below source duration"
+        )
+    if not isinstance(crosswind_step_retries, int) or crosswind_step_retries < 0:
+        raise ValueError("crosswind_step_retries must be a non-negative integer")
+
+    pretransition_wind_screen = None
+    pretransition_wind_failures: list[str] = []
+    wind_history_covers_pretransition = False
+    if puff_wind_history is not None:
+        from .addons.finite_release import assess_steady_wind_applicability
+
+        history_time, _history_speed, _history_direction = (
+            puff_wind_history.arrays()
+        )
+        tolerance = 1.0e-12 * max(source_duration_s, 1.0)
+        wind_history_covers_pretransition = (
+            history_time[0] <= tolerance
+            and history_time[-1] >= source_duration_s - tolerance
+        )
+        if wind_history_covers_pretransition:
+            pretransition_wind_screen = assess_steady_wind_applicability(
+                puff_wind_history,
+                start_s=0.0,
+                end_s=source_duration_s,
+                maximum_direction_span_deg=(
+                    maximum_steady_wind_direction_span_deg
+                ),
+                maximum_speed_range_fraction=(
+                    maximum_steady_wind_speed_range_fraction
+                ),
+            )
+            if not pretransition_wind_screen.applicable:
+                pretransition_wind_failures = [
+                    f"pretransition_{reason}"
+                    for reason in pretransition_wind_screen.reasons
+                ]
+                if strict_scope:
+                    raise ApplicabilityError(pretransition_wind_failures)
+    expanded = source if isinstance(source, LH2ExpandedSource) else None
+    source_plane = expanded.source if expanded is not None else source
+    remaining_clock = source_duration_s - upstream_material_time_s
+    if crosswind_maximum_distance is None:
+        # The source-plane velocity is a conservative travel-speed ceiling for
+        # the decelerating jet branch; the finite clock stops the solve early.
+        crosswind_maximum_distance = max(
+            30.0,
+            1.25 * max(float(source_plane.velocity), wind) * remaining_clock,
+        )
+    if not math.isfinite(crosswind_maximum_distance) or crosswind_maximum_distance <= 0.0:
+        raise ValueError("crosswind maximum distance must be finite and positive")
+
+    attempted_steps = []
+    steady = None
+    inversion_error = None
+    for retry in range(crosswind_step_retries + 1):
+        attempted_step = crosswind_maximum_step / 2.0**retry
+        attempted_steps.append(attempted_step)
+        try:
+            steady = run_lh2_yawed_crosswind_research(
+                source,
+                wind=wind,
+                wind_angle=wind_angle,
+                release_angle=release_angle,
+                height=height,
+                ambient_temperature=ambient_temperature,
+                ambient_pressure=ambient_pressure,
+                relative_humidity=relative_humidity,
+                roughness=roughness,
+                stability=stability,
+                averaging=averaging,
+                wind_reference_height=wind_reference_height,
+                maximum_nearfield_distance=maximum_nearfield_distance,
+                minimum_mass_fraction=minimum_mass_fraction,
+                radial_points=radial_points,
+                nearfield_maximum_step=nearfield_maximum_step,
+                nearfield_relative_tolerance=nearfield_relative_tolerance,
+                maximum_distance=float(crosswind_maximum_distance),
+                maximum_step=attempted_step,
+                stop_after_material_time_s=remaining_clock,
+                strict_scope=strict_scope,
+            )
+            break
+        except RuntimeError as error:
+            if "flux-state inversion failed" not in str(error):
+                raise
+            inversion_error = error
+    if steady is None:
+        tried = ", ".join(f"{value:g}" for value in attempted_steps)
+        raise RuntimeError(
+            "finite-release crosswind march could not invert a dilute "
+            f"conservative section after trying steps [{tried}] m. The plume "
+            "became numerically indistinguishable from ambient before the "
+            "source clock ended; use a physically larger source, a shorter "
+            "duration, or inspect the last steady section. Last error: "
+            f"{inversion_error}"
+        ) from inversion_error
+    if steady.raw_result is None:
+        raise RuntimeError("yawed crosswind did not retain its conservative result")
+    steady.applicability_failures.extend(pretransition_wind_failures)
+
+    from .addons.finite_puff import (
+        GaussianPuffConfig,
+        integrate_finite_gaussian_puff,
+    )
+    from .addons.finite_release import finite_release_puff_handoff
+
+    handoff = finite_release_puff_handoff(
+        steady.model,
+        steady.raw_result,
+        source_duration_s=source_duration_s,
+        source_hydrogen_mass_flow_kg_s=source_plane.fuel_mass_flow,
+        upstream_material_time_s=upstream_material_time_s,
+        hydrogen_flux_relative_tolerance=hydrogen_flux_relative_tolerance,
+    )
+    if handoff.status != "transition_ready":
+        reached = float(steady.raw_result["material_time_s"][-1])
+        raise RuntimeError(
+            "finite-release transition was not reached: crosswind material "
+            f"time={reached:g} s, required={remaining_clock:g} s; increase "
+            "crosswind_maximum_distance"
+        )
+    wind_vector = (
+        wind * math.cos(wind_angle), wind * math.sin(wind_angle), 0.0
+    )
+    puff = integrate_finite_gaussian_puff(
+        handoff,
+        steady.model.base.thermodynamics,
+        GaussianPuffConfig(
+            duration_s=puff_duration_s,
+            time_step_s=puff_time_step,
+            wind_velocity_m_s=wind_vector,
+            wind_history=puff_wind_history,
+            wind_history_time_offset_s=(
+                source_duration_s if puff_wind_history is not None else 0.0
+            ),
+        ),
+    )
+    warnings = [
+        "native puff continuation is conservation-tested but has not yet "
+        "received independent LH2 field-concentration validation",
+    ]
+    if puff_wind_history is not None:
+        if pretransition_wind_screen is None:
+            warnings.append(
+                "measured vector wind is coupled to the puff after transition, "
+                "but its record does not cover the complete pre-transition "
+                "window; that plume uses the declared nominal wind"
+            )
+        elif pretransition_wind_screen.applicable:
+            warnings.append(
+                "the measured pre-transition wind passed the declared steady-"
+                "wind variability screen; the plume uses its nominal vector, "
+                "and the measured vector history drives the puff"
+            )
+        else:
+            warnings.append(
+                "the measured pre-transition wind failed the declared steady-"
+                "wind variability screen; the nominal steady plume result is "
+                "conditional and is not a transient-plume solution"
+            )
+    return LH2FiniteReleaseResearchResult(
+        steady=steady, handoff=handoff, puff=puff, warnings=warnings,
+    )
+
+
+def run_lh2_rainout_pool_research(
+    source,
+    *,
+    release_duration_s: float,
+    post_release_duration_s: float,
+    release_position_m: tuple[float, float, float],
+    release_azimuth_rad: float,
+    release_elevation_rad: float,
+    wind_speed_m_s: float,
+    wind_to_angle_rad: float,
+    evaporation_coefficient_m2_s: float,
+    pool_area_m2: float,
+    pool_time_step_s: float,
+    substrate,
+    ambient_temperature_k: float = 295.0,
+    ambient_pressure_pa: float = 101325.0,
+    schmidt_number: float = 0.7,
+    droplet_classes=None,
+    maximum_droplet_time_s: float = 120.0,
+    latent_heat_j_kg: float = 4.46e5,
+    flight_environmental_heat_input_w: float | None = None,
+    pool_model: str = "dynamic",
+    dynamic_pool_numerics=None,
+    liquid_kinematic_viscosity_m2_s: float | None = None,
+    pool_evaporation_momentum_closure: str = "zero_radial_momentum_vapor",
+    pool_solid_heat_flux_multiplier: float = 1.0,
+    pool_solid_heat_flux_cap_w_m2: float | None = None,
+) -> LH2RainoutPoolResearchResult:
+    """Run one post-flash source through droplets, rainout and pool formation.
+
+    ``source`` is the result of
+    :func:`degali.addons.flashing_hydrogen_droplet_source`.  Wind and release
+    azimuths are mathematical *to* angles counter-clockwise from global +x.
+    Air density and viscosity are evaluated from CoolProp at the declared
+    ambient state.  The d-squared evaporation coefficient and deposition
+    footprint remain explicit inputs because neither is identifiable from the
+    source state alone.  By default the footprint feeds a conservative
+    axisymmetric spreading pool.  Set ``pool_model='fixed'`` only when a
+    physical boundary holds the pool area fixed.
+    """
+
+    from CoolProp.CoolProp import PropsSI
+
+    from .addons.droplet_rainout import (
+        concurrent_rainout_pool,
+        dynamic_rainout_pool,
+        droplet_transport_input_from_flash,
+        transport_droplet_population,
+    )
+    from .addons.dynamic_pool import DynamicPoolNumerics
+
+    scalars = {
+        "release_duration_s": release_duration_s,
+        "post_release_duration_s": post_release_duration_s,
+        "wind_speed_m_s": wind_speed_m_s,
+        "evaporation_coefficient_m2_s": evaporation_coefficient_m2_s,
+        "pool_area_m2": pool_area_m2,
+        "pool_time_step_s": pool_time_step_s,
+        "ambient_temperature_k": ambient_temperature_k,
+        "ambient_pressure_pa": ambient_pressure_pa,
+        "schmidt_number": schmidt_number,
+        "maximum_droplet_time_s": maximum_droplet_time_s,
+        "latent_heat_j_kg": latent_heat_j_kg,
+    }
+    for name, value in scalars.items():
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(f"{name} must be finite and positive")
+    for name, value in {
+        "release_azimuth_rad": release_azimuth_rad,
+        "release_elevation_rad": release_elevation_rad,
+        "wind_to_angle_rad": wind_to_angle_rad,
+    }.items():
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite")
+    if pool_model not in {"dynamic", "fixed"}:
+        raise ValueError("pool_model must be 'dynamic' or 'fixed'")
+    if liquid_kinematic_viscosity_m2_s is not None and (
+        not math.isfinite(liquid_kinematic_viscosity_m2_s)
+        or liquid_kinematic_viscosity_m2_s < 0.0
+    ):
+        raise ValueError(
+            "liquid_kinematic_viscosity_m2_s must be finite and non-negative"
+        )
+    if pool_evaporation_momentum_closure not in {
+        "zero_radial_momentum_vapor", "liquid_velocity_carryoff",
+    }:
+        raise ValueError("unsupported pool_evaporation_momentum_closure")
+    if (
+        not math.isfinite(pool_solid_heat_flux_multiplier)
+        or pool_solid_heat_flux_multiplier <= 0.0
+    ):
+        raise ValueError(
+            "pool_solid_heat_flux_multiplier must be finite and positive"
+        )
+    if pool_solid_heat_flux_cap_w_m2 is not None and (
+        not math.isfinite(pool_solid_heat_flux_cap_w_m2)
+        or pool_solid_heat_flux_cap_w_m2 <= 0.0
+    ):
+        raise ValueError(
+            "pool_solid_heat_flux_cap_w_m2 must be positive or None"
+        )
+    if pool_model == "fixed" and (
+        pool_evaporation_momentum_closure != "zero_radial_momentum_vapor"
+        or pool_solid_heat_flux_multiplier != 1.0
+        or pool_solid_heat_flux_cap_w_m2 is not None
+    ):
+        raise ValueError(
+            "dynamic-pool closure controls cannot be used with pool_model='fixed'"
+        )
+
+    cos_elevation = math.cos(release_elevation_rad)
+    jet_direction = (
+        cos_elevation * math.cos(release_azimuth_rad),
+        cos_elevation * math.sin(release_azimuth_rad),
+        math.sin(release_elevation_rad),
+    )
+    wind_velocity = (
+        wind_speed_m_s * math.cos(wind_to_angle_rad),
+        wind_speed_m_s * math.sin(wind_to_angle_rad),
+        0.0,
+    )
+    air_density = float(PropsSI(
+        "D", "T", ambient_temperature_k, "P", ambient_pressure_pa, "Air"
+    ))
+    dynamic_viscosity = float(PropsSI(
+        "V", "T", ambient_temperature_k, "P", ambient_pressure_pa, "Air"
+    ))
+    saturation_temperature_k = float(PropsSI(
+        "T", "P", ambient_pressure_pa, "Q", 0, "Hydrogen"
+    ))
+    boundary = droplet_transport_input_from_flash(
+        source,
+        release_position_m=release_position_m,
+        jet_direction=jet_direction,
+        wind_velocity_m_s=wind_velocity,
+        air_density_kg_m3=air_density,
+        air_kinematic_viscosity_m2_s=dynamic_viscosity / air_density,
+        evaporation_coefficient_m2_s=evaporation_coefficient_m2_s,
+        schmidt_number=schmidt_number,
+        classes=droplet_classes,
+        latent_heat_j_kg=(
+            latent_heat_j_kg
+            if flight_environmental_heat_input_w is not None else None
+        ),
+        environmental_heat_input_w=flight_environmental_heat_input_w,
+    )
+    droplets = transport_droplet_population(
+        boundary, max_time_s=maximum_droplet_time_s
+    )
+    if pool_model == "dynamic":
+        source_radius = math.sqrt(pool_area_m2 / math.pi)
+        numerics = dynamic_pool_numerics
+        if numerics is None:
+            numerics = DynamicPoolNumerics(
+                source_radius_m=source_radius,
+                domain_radius_m=max(10.0, 4.0 * source_radius),
+                radial_step_m=min(0.02, source_radius / 5.0),
+            )
+        elif not isinstance(numerics, DynamicPoolNumerics):
+            raise TypeError(
+                "dynamic_pool_numerics must be DynamicPoolNumerics or None"
+            )
+        footprint_area = math.pi * (
+            numerics.source_radius_m**2
+            - numerics.source_inner_radius_m**2
+        )
+        if not math.isclose(
+            footprint_area, pool_area_m2, rel_tol=1.0e-9, abs_tol=1.0e-12
+        ):
+            raise ValueError(
+                "pool_area_m2 must equal the disk/annulus area declared in "
+                "dynamic_pool_numerics"
+            )
+        if liquid_kinematic_viscosity_m2_s is None:
+            liquid_kinematic_viscosity_m2_s = float(PropsSI(
+                "V", "P", ambient_pressure_pa, "Q", 0, "Hydrogen"
+            )) / source.liquid_density
+        pool = dynamic_rainout_pool(
+            droplets,
+            direct_vapour_mass_flow_kg_s=source.vapour_mass_flow,
+            release_duration_s=release_duration_s,
+            post_release_duration_s=post_release_duration_s,
+            pool_time_step_s=pool_time_step_s,
+            substrate=substrate,
+            liquid_density_kg_m3=source.liquid_density,
+            liquid_kinematic_viscosity_m2_s=(
+                liquid_kinematic_viscosity_m2_s
+            ),
+            numerics=numerics,
+            saturation_temperature_k=saturation_temperature_k,
+            latent_heat_j_kg=latent_heat_j_kg,
+            evaporation_momentum_closure=(
+                pool_evaporation_momentum_closure
+            ),
+            solid_heat_flux_multiplier=pool_solid_heat_flux_multiplier,
+            solid_heat_flux_cap_w_m2=pool_solid_heat_flux_cap_w_m2,
+        )
+        warnings = [
+            "dynamic pool is horizontal and axisymmetric; slope, curbs, drains, "
+            "obstacles and wind shear on the liquid surface are not resolved",
+        ]
+    else:
+        pool = concurrent_rainout_pool(
+            droplets,
+            direct_vapour_mass_flow_kg_s=source.vapour_mass_flow,
+            release_duration_s=release_duration_s,
+            post_release_duration_s=post_release_duration_s,
+            pool_area_m2=pool_area_m2,
+            pool_time_step_s=pool_time_step_s,
+            substrate=substrate,
+            saturation_temperature_k=saturation_temperature_k,
+            latent_heat_j_kg=latent_heat_j_kg,
+        )
+        warnings = [
+            "fixed pool area is a declared physical boundary; use the default "
+            "dynamic route for an unconfined horizontal spill",
+        ]
+    if droplets.airborne_liquid_mass_flow_kg_s > 0.0:
+        warnings.append(
+            "some liquid remains airborne at the droplet trajectory time limit"
+        )
+    if flight_environmental_heat_input_w is None:
+        warnings.append(
+            "flight evaporation uses the declared d-squared law without a "
+            "closed environmental heat-input ledger"
+        )
+    return LH2RainoutPoolResearchResult(
+        source=source, droplets=droplets, pool_coupling=pool,
+        warnings=warnings,
+    )
+
+
 def lh2_source_from_measured_throat(
     *,
     throat_diameter: float,
@@ -1246,6 +2037,7 @@ def lh2_source_from_measured_throat(
     throat_temperature: float,
     throat_density: float,
     throat_velocity: float,
+    throat_enthalpy: float | None = None,
     mass_flow: float | None = None,
     ambient_pressure: float = 101325.0,
     theta: float = math.pi / 2.0,
@@ -1274,6 +2066,7 @@ def lh2_source_from_measured_throat(
         throat_temperature=throat_temperature,
         throat_density=throat_density,
         throat_velocity=throat_velocity,
+        throat_enthalpy=throat_enthalpy,
         ambient_pressure=ambient_pressure,
     )
     source = AxisymmetricJetSource(
@@ -1310,9 +2103,11 @@ def run_lh2_near_field_research(
 ) -> LH2NearFieldResearchResult:
     """Run the recommended conserved cryogenic free-jet research model.
 
-    The fixed physics are scalar-peak-constrained Gaussian establishment,
-    equilibrium N2/O2 phase change, and component temperature-dependent
-    enthalpy. The 4/4 Raman result applies to dry air at 295 K and 101325 Pa;
+    The fixed physics are scalar-peak-constrained Gaussian establishment and
+    component temperature-dependent enthalpy.  Its separate-pure-component
+    N2/O2 equilibrium is a research bound: a warning is emitted whenever the
+    solved dry-air centreline contains a bulk N2/O2 condensate. The 4/4 Raman
+    result applies to dry air at 295 K and 101325 Pa;
     humidity and co-flow remain explicit sensitivity inputs and generate an
     applicability warning. ``hydrogen_spin_isomer`` changes only the
     downstream component caloric table; ``para`` and ``ortho`` are explicit
@@ -1453,6 +2248,48 @@ def run_lh2_near_field_research(
         )))
 
     warnings = []
+    n2o2_phase_scope = "not evaluated"
+    if equilibrium_dry_air_condensation and relative_humidity == 0.0:
+        # This uses the same dry-air component inventory as the phase model.
+        # The check deliberately classifies the current pure-component split;
+        # it does not manufacture a mixed N2/O2 phase from a diagram.
+        from .addons.cryogenic_air import (
+            equilibrium_air_phase_split,
+            n2o2_condensed_phase_scope as classify_n2o2_scope,
+        )
+
+        classifications = set()
+        for temperature, fuel_fraction in zip(
+            solution.temperature, solution.mass_fraction,
+        ):
+            ambient_fraction = max(1.0 - float(fuel_fraction), 0.0)
+            if ambient_fraction <= 1.0e-12:
+                classifications.add("uncondensed_bulk_air")
+                continue
+            split = equilibrium_air_phase_split(
+                temperature=float(temperature), pressure=ambient_pressure,
+                hydrogen_flow=max(float(fuel_fraction), 1.0e-12),
+                nitrogen_flow=(
+                    ambient_fraction * model._dry_nitrogen_mass_fraction
+                ),
+                oxygen_flow=(
+                    ambient_fraction * model._dry_oxygen_mass_fraction
+                ),
+            )
+            classifications.add(classify_n2o2_scope(split).classification)
+        n2o2_phase_scope = ", ".join(sorted(classifications))
+        if classifications != {"uncondensed_bulk_air"}:
+            warnings.append(
+                "the dry-air centreline enters a condensed N2/O2 regime; "
+                "the separate-pure-component phase split is a research "
+                "bound, not a complete N2/O2 mixture thermodynamic closure"
+            )
+    elif equilibrium_dry_air_condensation:
+        warnings.append(
+            "N2/O2 mixture-scope audit is not evaluated for humid air; water "
+            "changes the gas inventory and no common N2/O2/H2O condensed "
+            "mixture closure is implemented"
+        )
     if relative_humidity != 0.0:
         warnings.append(
             "humidity is a sensitivity only; the Raman experiment did not "
@@ -1522,7 +2359,7 @@ def run_lh2_near_field_research(
             "configuration": (
                 "scalar_peak; "
                 + (
-                    "equilibrium N2/O2"
+                    "separate-pure-component N2/O2 equilibrium bound"
                     + ("/Ar" if include_argon_phase else "")
                     if equilibrium_dry_air_condensation
                     else "metastable gaseous N2/O2/Ar"
@@ -1531,6 +2368,7 @@ def run_lh2_near_field_research(
                 + f"; component h(T); {spin_name} H2"
                 + f"; {energy_transport} energy transport"
             ),
+            "N2/O2 phase scope": n2o2_phase_scope,
             "validation": (
                 "Hecht-Panda final 2019 journal fits, nine Table-1 dry-air "
                 "Raman cases; provisional four of four printed metrics "
@@ -1563,6 +2401,37 @@ class Assessment:
     warnings: list[str] = field(default_factory=list)
     notes: dict[str, str] = field(default_factory=dict)
 
+    @property
+    def screening_scope(self) -> str:
+        """Return ``qualified``, ``conditional`` or ``out_of_scope``.
+
+        A qualified result has no range warning.  A conditional result has a
+        non-fatal evidence limitation (for example a pool-size or distance
+        extrapolation).  A wind-steered release is explicitly out of scope:
+        the steady jet closure has no defensible concentration for it.
+        """
+
+        if not self.warnings:
+            return "qualified"
+        if any(
+            "not defensible" in warning or "wind steers" in warning
+            for warning in self.warnings
+        ):
+            return "out_of_scope"
+        return "conditional"
+
+    def require_screening_scope(self, *, allow_conditional: bool = False) -> None:
+        """Raise if this result must not be used as an evidence-backed screen.
+
+        ``allow_conditional=True`` is intended for research sensitivity runs;
+        it still never permits the wind-steered/out-of-scope branch.
+        """
+
+        if self.screening_scope == "out_of_scope" or (
+            self.warnings and not allow_conditional
+        ):
+            raise ApplicabilityError(self.warnings)
+
     def report(self) -> str:
         if self.notes.get("model path") == "JetPlume":
             concentration_evidence = (
@@ -1578,6 +2447,7 @@ class Assessment:
             f"  cloud regime                : {self.regime}"
             f"   [{LIFTOFF_HEIGHT.detail['regime']} on the NASA trials,"
             f" grade {LIFTOFF_HEIGHT.grade}]",
+            f"  screening scope             : {self.screening_scope}",
             f"  lowest flammable gas        : {self.lowest_flammable_height:.1f} m"
             f"   [{LIFTOFF_HEIGHT.cite()}, grade {LIFTOFF_HEIGHT.grade}]",
             f"  distance to 4 mol % (LFL)   : {self.distance_to_lfl:.1f} m"
@@ -1592,6 +2462,357 @@ class Assessment:
             lines.append("  outside the validated range:")
             lines += [f"    - {w}" for w in self.warnings]
         return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class PoolSourceSnapshot:
+    """One quasi-steady atmospheric response to a time-varying pool source."""
+
+    source_interval_start_s: float
+    source_time_s: float
+    vapour_rate_kg_s: float
+    assessment: Assessment
+    receptor_interval_start_s: float | None
+    receptor_time_s: float | None
+    receptor_centreline_mole_fraction: float | None
+    receptor_transient_mole_fraction: float | None = None
+
+
+@dataclass(frozen=True)
+class TimeResolvedPoolAssessment:
+    """Declared-source snapshots, not an unvalidated transient plume solver.
+
+    Atmospheric transport remains quasi-steady at each source snapshot.  When
+    a receptor and a propagation speed are supplied, ``receptor_time_s`` is a
+    transparent advection label only; it does not introduce a hidden storage,
+    puff, meander or turbulent-diffusion model.
+    """
+
+    snapshots: tuple[PoolSourceSnapshot, ...]
+    pool_diameter_m: float
+    wind_m_s: float
+    receptor_distance_m: float | None
+    propagation_speed_m_s: float | None
+    response_time_s: float | None = None
+
+    @property
+    def transient_kernel_used(self) -> bool:
+        """Whether an explicit first-order receptor response was requested."""
+
+        return self.response_time_s is not None
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        """Unique warnings inherited from the individual quasi-steady steps."""
+
+        return tuple(dict.fromkeys(
+            warning
+            for snapshot in self.snapshots
+            for warning in snapshot.assessment.warnings
+        ))
+
+    @property
+    def screening_scope(self) -> str:
+        if any(
+            "not defensible" in warning or "wind steers" in warning
+            for warning in self.warnings
+        ):
+            return "out_of_scope"
+        return "qualified" if not self.warnings else "conditional"
+
+    def require_screening_scope(self, *, allow_conditional: bool = False) -> None:
+        if self.screening_scope == "out_of_scope" or (
+            self.warnings and not allow_conditional
+        ):
+            raise ApplicabilityError(self.warnings)
+
+
+@dataclass(frozen=True)
+class AssessmentEnvelope:
+    """Deterministic input-sensitivity envelope around steady assessments.
+
+    The caller supplies the physically credible rate and wind bounds.  DEGALI
+    does not fit or invent an uncertainty percentage.  Each corner is run
+    independently through :func:`assess`, so the result is an auditable
+    sensitivity envelope rather than a confidence interval or a hidden
+    calibration.
+    """
+
+    scenarios: tuple[Assessment, ...]
+    rates_kg_s: tuple[float, ...]
+    winds_m_s: tuple[float, ...]
+
+    @staticmethod
+    def _finite_range(values: list[float]) -> tuple[float, float]:
+        finite = [value for value in values if math.isfinite(value)]
+        if not finite:
+            return (float("nan"), float("nan"))
+        return (min(finite), max(finite))
+
+    @property
+    def distance_to_lfl_range(self) -> tuple[float, float]:
+        return self._finite_range([
+            result.distance_to_lfl for result in self.scenarios
+        ])
+
+    @property
+    def lowest_flammable_height_range(self) -> tuple[float, float]:
+        return self._finite_range([
+            result.lowest_flammable_height for result in self.scenarios
+        ])
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            warning
+            for result in self.scenarios
+            for warning in result.warnings
+        ))
+
+    @property
+    def screening_scope(self) -> str:
+        if any(result.screening_scope == "out_of_scope" for result in self.scenarios):
+            return "out_of_scope"
+        return "qualified" if not self.warnings else "conditional"
+
+    def require_screening_scope(self, *, allow_conditional: bool = False) -> None:
+        if self.screening_scope == "out_of_scope" or (
+            self.warnings and not allow_conditional
+        ):
+            raise ApplicabilityError(self.warnings)
+
+
+@dataclass(frozen=True)
+class ObservationEnvelopeRow:
+    """One explicit source/wind hypothesis evaluated at an observation point."""
+
+    rate_kg_s: float
+    wind_m_s: float
+    predicted_mole_fraction: float
+    observed_mole_fraction: float
+    ratio_observed_over_predicted: float
+    within_factor: bool
+    screening_scope: str
+    warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ObservationEnvelope:
+    """No-fit admissible set for a single observed concentration.
+
+    This is an interval-identification diagnostic, not an optimiser or a
+    confidence interval.  Every source rate and wind value is supplied by the
+    caller and evaluated independently.  Multiple admissible rows mean that
+    source and wind cannot be uniquely inferred from that observation alone;
+    a single best-looking row is never silently selected.
+    """
+
+    rows: tuple[ObservationEnvelopeRow, ...]
+    distance_m: float
+    observed_mole_fraction: float
+    acceptance_factor: float
+    observation_operator: str = "centreline_mole_fraction"
+
+    @property
+    def admissible_rows(self) -> tuple[ObservationEnvelopeRow, ...]:
+        return tuple(row for row in self.rows if row.within_factor)
+
+    @property
+    def identifiable(self) -> bool:
+        """Whether exactly one supplied source/wind corner is admissible."""
+        return len(self.admissible_rows) == 1
+
+    @property
+    def source_rate_range(self) -> tuple[float, float]:
+        rows = self.admissible_rows
+        if not rows:
+            return (float("nan"), float("nan"))
+        return min(row.rate_kg_s for row in rows), max(row.rate_kg_s for row in rows)
+
+    @property
+    def wind_range(self) -> tuple[float, float]:
+        rows = self.admissible_rows
+        if not rows:
+            return (float("nan"), float("nan"))
+        return min(row.wind_m_s for row in rows), max(row.wind_m_s for row in rows)
+
+    @property
+    def warnings(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(
+            warning for row in self.rows for warning in row.warnings
+        ))
+
+    @property
+    def screening_scope(self) -> str:
+        if any(row.screening_scope == "out_of_scope" for row in self.rows):
+            return "out_of_scope"
+        return "qualified" if not self.warnings else "conditional"
+
+    def report(self) -> str:
+        status = "unique corner" if self.identifiable else (
+            "no admissible corner" if not self.admissible_rows else "non-identifiable set"
+        )
+        lines = [
+            "LH2 observation envelope (no fit)",
+            f"  distance                    : {self.distance_m:g} m",
+            f"  observed concentration      : {self.observed_mole_fraction:g} mol fraction",
+            f"  observation operator        : {self.observation_operator}",
+            f"  acceptance factor           : {self.acceptance_factor:g}",
+            f"  admissible source/wind rows : {len(self.admissible_rows)} ({status})",
+        ]
+        if self.admissible_rows:
+            lines.append(
+                f"  source rate range           : {self.source_rate_range[0]:g} .. {self.source_rate_range[1]:g} kg/s"
+            )
+            lines.append(
+                f"  wind range                  : {self.wind_range[0]:g} .. {self.wind_range[1]:g} m/s"
+            )
+        if self.warnings:
+            lines.append("  warnings:")
+            lines.extend(f"    - {warning}" for warning in self.warnings)
+        return "\n".join(lines)
+
+
+@dataclass(frozen=True)
+class JetSensorProjection:
+    """Model values evaluated at declared sensor coordinates.
+
+    The projection uses the same Gaussian vertical/lateral operator as the
+    validated jet comparison code. It is intentionally separate from
+    :class:`Assessment`, whose public trajectory is centreline-only.
+    """
+
+    points_m: tuple[tuple[float, float, float], ...]
+    mole_fractions: tuple[float, ...]
+    temperatures_k: tuple[float, ...]
+    warnings: tuple[str, ...]
+    model_path: str = "JetPlume"
+
+    @property
+    def complete(self) -> bool:
+        return all(math.isfinite(value) for value in self.mole_fractions)
+
+    def value_at(self, index: int) -> float:
+        return self.mole_fractions[index]
+
+
+def _trajectory_centreline_at(trajectory: np.ndarray, distance_m: float) -> float:
+    """Interpolate a reported steady plume centreline without extrapolation."""
+
+    if trajectory.ndim != 2 or trajectory.shape[0] < 2 or trajectory.shape[1] < 3:
+        return float("nan")
+    order = np.argsort(trajectory[:, 0])
+    x = trajectory[order, 0]
+    c = trajectory[order, 2]
+    if distance_m < x[0] or distance_m > x[-1]:
+        return float("nan")
+    return float(np.interp(distance_m, x, c))
+
+
+def assess_pool_history(
+    evaporation,
+    *,
+    wind: float,
+    pool_diameter: float,
+    ambient_temperature: float = 288.15,
+    relative_humidity: float = 65.0,
+    ambient_pressure: float = 101325.0,
+    max_distance: float = 100.0,
+    receptor_distance: float | None = None,
+    propagation_speed: float | None = None,
+    strict_scope: bool = False,
+    response_time_s: float | None = None,
+) -> TimeResolvedPoolAssessment:
+    """Map declared pool-evaporation steps to separate plume assessments.
+
+    ``evaporation`` is normally a
+    :class:`degali.addons.pool_evaporation.PoolEvaporationResult`.  Each of
+    its positive source steps is evaluated through the same steady pool plume
+    path as :func:`assess`; no liquid release is converted to vapour here.
+
+    A time-dependent source alone does not validate a time-dependent plume.
+    Thus the function returns a sequence of explicitly labelled quasi-steady
+    responses.  If a receptor is requested, an explicit positive
+    ``propagation_speed`` is required before an arrival time is reported.
+    ``strict_scope=True`` refuses any source snapshot outside the pool
+    evidence envelope; otherwise each snapshot retains its warning.
+    When ``response_time_s`` is supplied, each receptor's quasi-steady
+    concentration is passed through a causal first-order response kernel. The
+    response time is an explicit user input; this is a low-order research
+    surrogate, not a validated transient puff or meander solver.
+    """
+
+    if wind <= 0.0 or pool_diameter <= 0.0 or max_distance <= 0.0:
+        raise ValueError("wind, pool_diameter and max_distance must be positive")
+    if response_time_s is not None:
+        if response_time_s <= 0.0 or not math.isfinite(response_time_s):
+            raise ValueError("response_time_s must be finite and positive")
+        if receptor_distance is None:
+            raise ValueError(
+                "response_time_s requires receptor_distance so the response "
+                "operator has a defined observation point"
+            )
+    if receptor_distance is not None:
+        if receptor_distance < 0.0:
+            raise ValueError("receptor_distance cannot be negative")
+        if propagation_speed is None or propagation_speed <= 0.0:
+            raise ValueError(
+                "a positive propagation_speed is required with receptor_distance"
+            )
+        max_distance = max(max_distance, receptor_distance)
+    elif propagation_speed is not None and propagation_speed <= 0.0:
+        raise ValueError("propagation_speed must be positive")
+
+    snapshots = []
+    previous_time = 0.0
+    filtered_concentration = 0.0
+    for step in evaporation.steps:
+        if step.vapour_rate_kg_s <= 0.0:
+            previous_time = float(step.elapsed_s)
+            continue
+        result = assess(
+            rate=step.vapour_rate_kg_s, wind=wind, pool_diameter=pool_diameter,
+            ambient_temperature=ambient_temperature,
+            relative_humidity=relative_humidity, ambient_pressure=ambient_pressure,
+            max_distance=max_distance, at_distance=receptor_distance,
+            strict_scope=strict_scope,
+        )
+        concentration = (
+            _trajectory_centreline_at(result.trajectory, receptor_distance)
+            if receptor_distance is not None else None
+        )
+        receptor_time = (
+            step.elapsed_s + receptor_distance / propagation_speed
+            if receptor_distance is not None and propagation_speed is not None
+            else None
+        )
+        receptor_start = (
+            previous_time + receptor_distance / propagation_speed
+            if receptor_distance is not None and propagation_speed is not None
+            else None
+        )
+        filtered = None
+        if (
+            response_time_s is not None and concentration is not None
+            and math.isfinite(concentration)
+        ):
+            elapsed = max(float(step.elapsed_s) - previous_time, 0.0)
+            alpha = 1.0 - math.exp(-elapsed / response_time_s)
+            filtered_concentration += alpha * (concentration - filtered_concentration)
+            filtered = filtered_concentration
+        snapshots.append(PoolSourceSnapshot(
+            source_interval_start_s=previous_time, source_time_s=float(step.elapsed_s),
+            vapour_rate_kg_s=float(step.vapour_rate_kg_s), assessment=result,
+            receptor_interval_start_s=receptor_start, receptor_time_s=receptor_time,
+            receptor_centreline_mole_fraction=concentration,
+            receptor_transient_mole_fraction=filtered,
+        ))
+        previous_time = float(step.elapsed_s)
+    return TimeResolvedPoolAssessment(
+        snapshots=tuple(snapshots), pool_diameter_m=float(pool_diameter),
+        wind_m_s=float(wind), receptor_distance_m=receptor_distance,
+        propagation_speed_m_s=propagation_speed, response_time_s=response_time_s,
+    )
 
 
 def _check(kind, rate, wind, distance, velocity_ratio=None, **rest) -> list[str]:
@@ -1633,6 +2854,20 @@ def _first_falling_crossing(points, level: float) -> float:
     return float("nan")
 
 
+def _pool_centreline_mole_fraction(state, table) -> float:
+    """Return the point value on a LiftoffPlume section axis.
+
+    ``LiftoffPlume`` conserves a *cross-sectional mean* mass fraction, while
+    its Gaussian section supplies the spatial distribution.  The public
+    trajectory and LFL distance are centreline quantities, so they must use
+    the Gaussian peak rather than the conserved mean.  The mean remains the
+    quantity used inside the integral balances.
+    """
+    return table.from_mass_fraction(
+        max(min(state.peak_concentration, 1.0), 0.0), wa=0.0
+    ).yc
+
+
 def _jet_lowest_flammable_height(trajectory, x: float) -> float:
     """Lowest height at which a jet is at or above the LFL at ``x``.
 
@@ -1666,6 +2901,151 @@ def _jet_lowest_flammable_height(trajectory, x: float) -> float:
     return hi
 
 
+def assess_envelope(
+    *,
+    rates,
+    winds,
+    height: float = 0.0,
+    orifice: float | None = None,
+    pool_diameter: float | None = None,
+    storage_pressure: float = 1.013,
+    ambient_temperature: float = 288.15,
+    relative_humidity: float = 65.0,
+    ambient_pressure: float = 101325.0,
+    max_distance: float = 100.0,
+    at_distance: float | None = None,
+    strict_scope: bool = False,
+) -> AssessmentEnvelope:
+    """Run a caller-supplied rate/wind sensitivity envelope.
+
+    ``rates`` and ``winds`` are explicit credible values (usually low,
+    nominal and high). The Cartesian product is evaluated without fitting a
+    correction to observations or assigning a statistical confidence.
+    """
+
+    rate_values = tuple(float(value) for value in rates)
+    wind_values = tuple(float(value) for value in winds)
+    if not rate_values or not wind_values:
+        raise ValueError("rates and winds must each contain at least one value")
+    scenarios = []
+    for rate_value, wind_value in product(rate_values, wind_values):
+        scenarios.append(assess(
+            rate=rate_value,
+            wind=wind_value,
+            height=height,
+            orifice=orifice,
+            pool_diameter=pool_diameter,
+            storage_pressure=storage_pressure,
+            ambient_temperature=ambient_temperature,
+            relative_humidity=relative_humidity,
+            ambient_pressure=ambient_pressure,
+            max_distance=max_distance,
+            at_distance=at_distance,
+            strict_scope=strict_scope,
+        ))
+    return AssessmentEnvelope(
+        scenarios=tuple(scenarios), rates_kg_s=rate_values, winds_m_s=wind_values
+    )
+
+
+def assess_observation_envelope(
+    *,
+    rates,
+    winds,
+    observed_mole_fraction: float,
+    distance_m: float,
+    height: float = 0.0,
+    orifice: float | None = None,
+    pool_diameter: float | None = None,
+    storage_pressure: float = 1.013,
+    ambient_temperature: float = 288.15,
+    relative_humidity: float = 65.0,
+    ambient_pressure: float = 101325.0,
+    max_distance: float | None = None,
+    acceptance_factor: float = 2.0,
+    observation_operator: str = "centreline_mole_fraction",
+    strict_scope: bool = False,
+) -> ObservationEnvelope:
+    """Evaluate a no-fit source/wind admissible set at one observation.
+
+    ``rates`` and ``winds`` are declared hypotheses, not fitted parameters.
+    A row is marked admissible when its predicted centreline concentration is
+    within ``acceptance_factor`` of the supplied observation.  The result
+    reports all rows and deliberately calls a multi-row result
+    ``non-identifiable``; it never chooses the closest row or alters the
+    default source term.  The current operator is deliberately limited to the
+    model centreline; a sensor-height or arc-maximum operator must be supplied
+    by a separate validated observation adapter rather than silently inferred
+    from a centreline value.  This is the recommended first diagnostic for a
+    FFI Test 6-style source/wind residual.
+    """
+    if not math.isfinite(observed_mole_fraction) or observed_mole_fraction <= 0.0:
+        raise ValueError("observed_mole_fraction must be finite and positive")
+    if not math.isfinite(distance_m) or distance_m < 0.0:
+        raise ValueError("distance_m must be finite and non-negative")
+    if not math.isfinite(acceptance_factor) or acceptance_factor < 1.0:
+        raise ValueError("acceptance_factor must be finite and at least one")
+    if observation_operator != "centreline_mole_fraction":
+        raise ValueError(
+            "only centreline_mole_fraction is currently implemented; "
+            "sensor-height/arc operators require an explicit validated observation adapter"
+        )
+    max_distance = distance_m if max_distance is None else float(max_distance)
+    if max_distance < distance_m:
+        raise ValueError("max_distance must reach distance_m")
+    # The adaptive trajectory integrators usually stop one final step before
+    # the requested endpoint.  Give the evaluator a small downstream margin
+    # so a receptor exactly at ``distance_m`` is interpolated rather than
+    # reported as missing; this is numerical padding, not physical
+    # extrapolation.
+    integration_distance = max(
+        max_distance, distance_m + max(1.0e-3, 0.05 * distance_m)
+    )
+    rate_values = tuple(float(value) for value in rates)
+    wind_values = tuple(float(value) for value in winds)
+    if not rate_values or not wind_values:
+        raise ValueError("rates and winds must each contain at least one value")
+
+    rows: list[ObservationEnvelopeRow] = []
+    for rate_value, wind_value in product(rate_values, wind_values):
+        result = assess(
+            rate=rate_value,
+            wind=wind_value,
+            height=height,
+            orifice=orifice,
+            pool_diameter=pool_diameter,
+            storage_pressure=storage_pressure,
+            ambient_temperature=ambient_temperature,
+            relative_humidity=relative_humidity,
+            ambient_pressure=ambient_pressure,
+            max_distance=integration_distance,
+            at_distance=distance_m,
+            strict_scope=strict_scope,
+        )
+        predicted = _trajectory_centreline_at(result.trajectory, distance_m)
+        ratio = (
+            observed_mole_fraction / predicted
+            if math.isfinite(predicted) and predicted > 0.0
+            else float("inf")
+        )
+        rows.append(ObservationEnvelopeRow(
+            rate_kg_s=rate_value,
+            wind_m_s=wind_value,
+            predicted_mole_fraction=predicted,
+            observed_mole_fraction=observed_mole_fraction,
+            ratio_observed_over_predicted=ratio,
+            within_factor=(1.0 / acceptance_factor <= ratio <= acceptance_factor),
+            screening_scope=result.screening_scope,
+            warnings=tuple(result.warnings),
+        ))
+    return ObservationEnvelope(
+        rows=tuple(rows), distance_m=distance_m,
+        observed_mole_fraction=observed_mole_fraction,
+        acceptance_factor=acceptance_factor,
+        observation_operator=observation_operator,
+    )
+
+
 def assess(
     *,
     rate: float,
@@ -1679,6 +3059,7 @@ def assess(
     ambient_pressure: float = 101325.0,
     max_distance: float = 100.0,
     at_distance: float | None = None,
+    strict_scope: bool = False,
 ) -> Assessment:
     """Assess a liquid hydrogen release.
 
@@ -1697,6 +3078,11 @@ def assess(
         is required.
     storage_pressure
         Absolute, bar.  Only used for a pressurised release.
+
+    strict_scope
+        If true, raise :class:`ApplicabilityError` rather than returning a
+        number with an evidence-range warning. The default remains warning
+        based for backwards compatibility.
 
     Notes
     -----
@@ -1850,14 +3236,18 @@ def assess(
         )
 
         for s in result.states:
-            y = table.from_mass_fraction(s.concentration, wa=0.0).yc
+            # The state carries its conserved section mean.  A flammability
+            # contour and the documented Assessment trajectory are point
+            # quantities on the plume axis, which the Gaussian section
+            # represents by its peak concentration.
+            y = _pool_centreline_mole_fraction(s, table)
             traj.append([s.x, s.z, y])
-            if math.isnan(d_lfl) and y <= LFL:
-                d_lfl = s.x
-            if math.isnan(d_stoich) and y <= STOICHIOMETRIC:
-                d_stoich = s.x
             if y >= LFL:
                 lowest = max(s.z - s.radius, 0.0)
+
+        centreline = [(r[0], r[2]) for r in traj]
+        d_lfl = _first_falling_crossing(centreline, LFL)
+        d_stoich = _first_falling_crossing(centreline, STOICHIOMETRIC)
 
         if at_distance is not None and traj:
             arr = np.array(traj)
@@ -1880,7 +3270,7 @@ def assess(
         or [0.0]
     )
     kind = "jet" if orifice is not None else "pool"
-    return Assessment(
+    result = Assessment(
         distance_to_lfl=d_lfl,
         distance_to_stoichiometric=d_stoich,
         lowest_flammable_height=lowest,
@@ -1903,3 +3293,88 @@ def assess(
             "model path": model_path,
         },
     )
+    if strict_scope:
+        result.require_screening_scope()
+    return result
+
+
+def project_lh2_jet_to_sensors(
+    *,
+    rate: float,
+    wind: float,
+    height: float,
+    orifice: float,
+    points_m: Sequence[Sequence[float]],
+    storage_pressure: float = 1.013,
+    ambient_temperature: float = 288.15,
+    relative_humidity: float = 65.0,
+    ambient_pressure: float = 101325.0,
+    max_distance: float | None = None,
+    strict_scope: bool = False,
+) -> JetSensorProjection:
+    """Evaluate the jet at exact sensor points, including vertical profiles.
+
+    ``points_m`` uses downwind/crosswind/height coordinates ``(x, y, z)``.
+    This exposes the observation operator needed for arc maxima and mast
+    sensors; it does not replace missing time synchronisation or plume
+    meander.  Points outside the computed trajectory are returned as ``nan``
+    and are never silently extrapolated.
+    """
+    if rate <= 0.0 or wind <= 0.0 or height <= 0.0 or orifice <= 0.0:
+        raise ValueError("rate, wind, height and orifice must be positive")
+    points = np.asarray(points_m, dtype=float)
+    if points.ndim != 2 or points.shape[1] != 3 or points.shape[0] == 0:
+        raise ValueError("points_m must be a non-empty (n, 3) array")
+    if not np.all(np.isfinite(points)) or np.any(points[:, 0] < 0.0):
+        raise ValueError("sensor points must be finite and downwind")
+    farthest = float(np.max(points[:, 0]))
+    integration_distance = farthest if max_distance is None else float(max_distance)
+    if integration_distance < farthest or integration_distance <= 0.0:
+        raise ValueError("max_distance must reach every sensor point")
+    integration_distance = max(integration_distance, farthest + max(1.0e-3, 0.05 * farthest))
+
+    from .validation.nearfield import STEP, Trajectory, hydrogen_jet
+
+    jp, y0 = hydrogen_jet(
+        rate=rate, diameter=orifice, wind=wind, height=height,
+        ambient_temperature=ambient_temperature,
+        relative_humidity=relative_humidity,
+        ambient_pressure=ambient_pressure,
+        storage_pressure_barg=max(storage_pressure - ambient_pressure / 1.0e5, 0.0),
+        corrections=True, ground_effect=False,
+    )
+    run = jp.run(
+        y0, distmx=STEP,
+        smax=max(40.0, 2.5 * integration_distance),
+    )
+    trajectory = Trajectory(jp.th.table, run.rows)
+    if not trajectory.ok:
+        raise RuntimeError("jet trajectory did not establish a queryable profile")
+    concentrations, temperatures = [], []
+    for x, y, z in points:
+        concentration = trajectory.concentration_at(float(x), float(y), float(z))
+        state = trajectory.at(float(x))
+        if state is None:
+            concentrations.append(float("nan"))
+            temperatures.append(float("nan"))
+        else:
+            concentrations.append(float(concentration / 100.0))
+            temperatures.append(float(trajectory.temperature_at(float(x), float(y), float(z))))
+
+    source = getattr(jp, "axisymmetric_source", None)
+    ratio = (
+        float(source.velocity) / wind
+        if source is not None and math.isfinite(float(source.velocity)) else None
+    )
+    warnings = _check(
+        "jet", rate, wind, farthest, velocity_ratio=ratio,
+        orifice=orifice, height=height,
+    )
+    projection = JetSensorProjection(
+        points_m=tuple(tuple(float(value) for value in row) for row in points),
+        mole_fractions=tuple(concentrations), temperatures_k=tuple(temperatures),
+        warnings=tuple(warnings),
+    )
+    if strict_scope and projection.warnings:
+        raise ApplicabilityError(projection.warnings)
+    return projection

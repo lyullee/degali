@@ -20,6 +20,8 @@ def model(
     equilibrium_air_condensation=False,
     condensed_enthalpy_specific=0.0,
     condensed_air_temperature=80.0,
+    ground_heat_transfer_coefficient_w_m2_k=0.0,
+    ground_surface_temperature_k=None,
 ):
     def temperature_from_density(density, fraction):
         density = np.asarray(density, dtype=float)
@@ -54,6 +56,10 @@ def model(
         thermal_relaxation_rate=thermal_relaxation_rate,
         phase_transition_lag_rate=phase_transition_lag_rate,
         turbulence_heat_exchange_rate=turbulence_heat_exchange_rate,
+        ground_heat_transfer_coefficient_w_m2_k=(
+            ground_heat_transfer_coefficient_w_m2_k
+        ),
+        ground_surface_temperature_k=ground_surface_temperature_k,
     )
 
 
@@ -132,6 +138,16 @@ def test_factory_refuses_to_drop_other_model_subclass_behavior():
     other = Unknown(old.jetplume, old.thermodynamics)
     with pytest.raises(ValueError):
         with_continuous_ambient_spreading(other)
+
+
+def test_factory_preserves_declared_ground_thermal_boundary():
+    old = model(
+        ground_heat_transfer_coefficient_w_m2_k=12.0,
+        ground_surface_temperature_k=270.0,
+    )
+    new = with_continuous_ambient_spreading(old)
+    assert new.ground_heat_transfer_coefficient_w_m2_k == 12.0
+    assert new.ground_surface_temperature_k == 270.0
 
 
 def test_total_energy_work_option_adds_buoyancy_projection_term():

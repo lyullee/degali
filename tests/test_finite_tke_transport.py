@@ -48,6 +48,45 @@ def test_callable_fields_and_pointwise_positivity(transport):
         model.local(a, b)
 
 
+def test_optional_axial_rms_screen_rejects_tke_deficits_without_repair(transport):
+    with pytest.raises(ValueError, match='exactly one'):
+        make_model(transport, axial_rms=.1)
+    with pytest.raises(ValueError, match='PSD lower bound'):
+        make_model(
+            transport, axial_rms=3., axial_shear_covariance=(0., 0.),
+            velocity_rms_provenance='gas_velocity'
+        )
+    model = make_model(
+        transport, axial_rms=.1, axial_shear_covariance=(0., 0.),
+        velocity_rms_provenance='gas_velocity'
+    )
+    local = model.local(np.array([.2]), np.array([.3]))
+    assert local['tke_realizability_margin'][0] >= 0.
+
+
+def test_two_normal_rms_screen_is_an_alternative_lower_bound_not_a_completion(transport):
+    with pytest.raises(ValueError, match='axial RMS is required'):
+        make_model(transport, transverse_rms=.1)
+    with pytest.raises(ValueError, match='exactly one'):
+        make_model(transport, axial_rms=.1, axial_shear_covariance=(0., 0.),
+                   transverse_rms=.1, velocity_rms_provenance='gas_velocity')
+    with pytest.raises(ValueError, match='must explicitly declare'):
+        make_model(transport, axial_rms=.1, transverse_rms=.1)
+    with pytest.raises(ValueError, match='particle-tracer'):
+        make_model(transport, axial_rms=.1, transverse_rms=.1,
+                   velocity_rms_provenance='particle_tracer')
+    with pytest.raises(ValueError, match='two-normal-RMS PSD lower bound'):
+        make_model(transport, axial_rms=3., transverse_rms=3.,
+                   velocity_rms_provenance='gas_velocity')
+    model = make_model(transport, axial_rms=.1, transverse_rms=.1,
+                       velocity_rms_provenance='gas_velocity')
+    local = model.local(np.array([.2]), np.array([.3]))
+    assert local['tke_observation_kind'] == 'two_normal_rms'
+    assert local['velocity_rms_provenance'] == 'gas_velocity'
+    assert local['tke_realizability_margin'][0] >= 0.
+    assert 'axial_shear_covariance' not in local
+
+
 def test_tke_shape_or_underflow_is_rejected_not_clipped(finite):
     finite.parameters[1:] = 1.
     with pytest.raises(ValueError, match='trust region'):

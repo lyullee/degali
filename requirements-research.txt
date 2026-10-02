@@ -9,3 +9,4 @@ colorama==0.4.6
 iniconfig==2.3.0
 pluggy==1.6.0
 pygments==2.21.0
+xlrd==2.0.1

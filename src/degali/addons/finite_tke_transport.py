@@ -16,6 +16,11 @@ from .phase_radial_quadrature import gauss_rule
 from .reservoir_thermal import _PhaseForceView
 from .energy_crosswind import IndependentEnergyCrosswind
 from .stress_realizability import shear_tke_lower_bound
+from .tke_parameterization import (
+    tke_realizability_margin,
+    tke_two_normal_rms_realizability_margin,
+)
+from .transport_evidence import TURBULENCE_BOUNDARY
 
 
 def _positive_field(supplied, data, name):
@@ -27,6 +32,17 @@ def _positive_field(supplied, data, name):
     if (value.shape != data['q'].shape or not np.all(np.isfinite(value))
             or np.any(value <= 0.)):
         raise ValueError(f'{name} must be a positive finite scalar or matching field')
+    return value
+
+
+def _nonnegative_field(supplied, data, name):
+    raw = supplied(data) if callable(supplied) else supplied
+    value = np.asarray(raw, float)
+    if value.ndim == 0:
+        value = np.full(len(data['q']), float(value))
+    if (value.shape != data['q'].shape or not np.all(np.isfinite(value))
+            or np.any(value < 0.)):
+        raise ValueError(f'{name} must be a nonnegative finite scalar or matching field')
     return value
 
 
@@ -43,13 +59,31 @@ def _ratio_field(supplied, data, name):
     return value
 
 
+def _shear_field(supplied, data, name):
+    """Return explicit axial/transverse covariance components at local nodes."""
+    raw = supplied(data) if callable(supplied) else supplied
+    value = np.asarray(raw, float)
+    if value.shape == (2,):
+        value = np.broadcast_to(value, (len(data['q']), 2)).copy()
+    if (value.shape != (len(data['q']), 2) or not np.all(np.isfinite(value))):
+        raise ValueError(f'{name} must be a finite two-component vector or matching field')
+    return value
+
+
 class FiniteTkeModalTransport:
     def __init__(self, base_model, tke_parameters, *, ambient_tke,
                  tke_diffusivity, dissipation_time, circulation_amplitudes,
-                 normal_stress_ratio=None):
+                 normal_stress_ratio=None, axial_rms=None,
+                 axial_shear_covariance=None, transverse_rms=None,
+                 velocity_rms_provenance=None):
         if not isinstance(base_model, EnrichedModalTransport):
             raise TypeError('an explicit enriched mean-state transport model is required')
         self.base = base_model
+        # This branch has manufactured/conservation checks, not an identified
+        # LH2 k--epsilon/pressure-strain closure.  Keep the boundary attached
+        # to every instance and result so downstream callers cannot mistake an
+        # explicit sensitivity input for a promoted model.
+        self.evidence_boundary = TURBULENCE_BOUNDARY
         self.size, self.mean_count = base_model.size, base_model.count
         self.tke_count = self.size + 1
         self.count = self.mean_count + self.tke_count
@@ -65,6 +99,25 @@ class FiniteTkeModalTransport:
         if self.amplitudes.shape != (4,) or not np.all(np.isfinite(self.amplitudes)):
             raise ValueError('four finite fixed circulation amplitudes required; no closure is inferred')
         self.normal_stress_ratio = normal_stress_ratio
+        shear_supplied = axial_shear_covariance is not None
+        transverse_supplied = transverse_rms is not None
+        if axial_rms is None and (shear_supplied or transverse_supplied):
+            raise ValueError('axial RMS is required with either shear covariance or transverse RMS')
+        if axial_rms is not None and shear_supplied == transverse_supplied:
+            raise ValueError(
+                'axial RMS requires exactly one of axial shear covariance or transverse RMS'
+            )
+        if axial_rms is None and velocity_rms_provenance is not None:
+            raise ValueError('velocity-RMS provenance is only valid when an RMS observation is supplied')
+        if axial_rms is not None and velocity_rms_provenance != 'gas_velocity':
+            raise ValueError(
+                "RMS observations must explicitly declare velocity_rms_provenance='gas_velocity'; "
+                'particle-tracer PIV is not assumed to equal gas velocity'
+            )
+        self.axial_rms = axial_rms
+        self.axial_shear_covariance = axial_shear_covariance
+        self.transverse_rms = transverse_rms
+        self.velocity_rms_provenance = velocity_rms_provenance
         self.active = np.r_[base_model.active, np.arange(self.mean_count, self.count)]
         # Also reject invalid scalar/callable inputs at construction, not only
         # after an expensive quadrature. Full positivity remains pointwise.
@@ -109,6 +162,31 @@ class FiniteTkeModalTransport:
         d['dissipation'] = b.area*q_density/d['tau']
         if not np.all(np.isfinite(d['dissipation'])):
             raise ValueError('dissipation overflow; supplied state/time is inadmissible')
+        if self.axial_rms is not None:
+            rms = _nonnegative_field(self.axial_rms, d, 'axial RMS')
+            d['axial_rms'] = rms
+            if self.axial_shear_covariance is not None:
+                shear = _shear_field(
+                    self.axial_shear_covariance, d, 'axial shear covariance'
+                )
+                screen = tke_realizability_margin(d['tke'], rms, shear)
+                if not screen['realizable']:
+                    raise ValueError('supplied TKE violates the axial-shear PSD lower bound')
+                d['axial_shear_covariance'] = shear
+                d['tke_observation_kind'] = 'axial_rms_and_shear_covariance'
+            else:
+                transverse = _nonnegative_field(
+                    self.transverse_rms, d, 'transverse RMS'
+                )
+                screen = tke_two_normal_rms_realizability_margin(
+                    d['tke'], rms, transverse
+                )
+                if not screen['realizable']:
+                    raise ValueError('supplied TKE violates the two-normal-RMS PSD lower bound')
+                d['transverse_rms'] = transverse
+                d['tke_observation_kind'] = 'two_normal_rms'
+            d['velocity_rms_provenance'] = self.velocity_rms_provenance
+            d['tke_realizability_margin'] = screen['realizability_margin']
         return d
 
     def local(self, a, b):
@@ -291,6 +369,7 @@ class FiniteTkeModalTransport:
                    peak_batch_nodes=peak, batch_size=batch_size, phase_split_angles=split_angles,
                    adopted=False, field_scored=False, closure_inputs_validated=False,
                    thermal_source='+'.join(thermal_source), tke_source='production_minus_dissipation')
+        out.update(self.evidence_boundary.audit_fields())
         if solve:
             rates = np.zeros(n)
             rates[5:7] = math.cos(m.state[3]), math.sin(m.state[3])
@@ -391,4 +470,5 @@ class FiniteTkeModalTransport:
                     minimum_shear_production=minimum_prod, minimum_momentum_diffusivity=minimum_chi,
                     maximum_outward_mass=max_mass, maximum_nonradial_stress_fraction=nonradial,
                     curvature_half_width=float(abs(rates[3])*lengths[1]), angles=angles, order=order,
-                    physical_closure_passed=False, field_scored=False)
+                    physical_closure_passed=False, field_scored=False,
+                    **self.evidence_boundary.audit_fields())

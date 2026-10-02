@@ -1,6 +1,19 @@
 # Changelog
 
-## Unreleased - GitHub alpha snapshot
+## 0.2.0 - 2026-10-03
+
+- Added a finite-duration release path with automatic steady-to-puff handoff,
+  transient receptor histories and explicit mass-conservation diagnostics.
+- Added an opt-in axisymmetric dynamic pool with substrate heat transfer,
+  cryogenic evaporation, droplet rainout coupling and validation helpers for
+  the JUEL and Sandia liquid-hydrogen pool experiments.
+- Added finite wall-jet transition, yawed crosswind, site-geometry and obstacle
+  wake screening paths while preserving the existing DEGADIS-compatible
+  defaults.
+- Added cryogenic blowdown, mixed-phase and thermal-property extensions,
+  including a cached CoolProp lookup-table path for repeated evaluations.
+- Expanded the public validation portfolio and documented the evidence
+  boundaries for PRESLHY, ELVHYS, FFI Test 6 and open-channel hydrogen data.
 
 - Added an identical-sensor Trial 10/23 audit of the coefficient-free direct-
   flux thermal-moment path. Both step levels reach 4 m and pass conservation,
@@ -69,8 +82,9 @@
   `docs/README-development-log-2026-09-06.md`.
 - Added publication, contribution and security policies plus an automated
   repository size, restricted-file and credential check.
-- The current package remains `0.1.0.dev0`. No research-only LH2 candidate was
-  promoted and no physical or numerical result was changed by packaging.
+- Version 0.1.0 was the initial public alpha snapshot. Research-only paths in
+  this release remain opt-in unless their documentation explicitly says
+  otherwise.
 
 ## Research history
 

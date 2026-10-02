@@ -9,6 +9,69 @@ import math
 import numpy as np
 
 
+def minimum_tke_from_axial_rms(shear_covariance, axial_rms):
+    """Sharp pointwise TKE lower bound from one measured normal stress.
+
+    ``axial_rms`` supplies sqrt(R_ss), while ``shear_covariance`` supplies
+    the two R_s-perp components. Positive-semidefiniteness requires
+
+        k >= 0.5 * (R_ss + ||R_s-perp||**2 / R_ss).
+
+    This is a realizability constraint, not an isotropy assumption or a
+    dissipation closure. When only axial RMS is available, pass zero shear;
+    the resulting ``0.5*axial_rms**2`` is the weakest defensible bound.
+    """
+    r = np.asarray(shear_covariance, float)
+    rms = np.asarray(axial_rms, float)
+    if r.ndim != 2 or r.shape[1] != 2 or rms.shape != (len(r),):
+        raise ValueError('matching two-component shear and axial-RMS arrays required')
+    if (not np.all(np.isfinite(r)) or not np.all(np.isfinite(rms))
+            or np.any(rms < 0.)):
+        raise ValueError('finite covariance components and nonnegative axial RMS required')
+    variance = rms*rms
+    shear_squared = np.sum(r*r, axis=1)
+    positive = variance > 0.
+    if np.any(shear_squared[~positive] > 0.):
+        raise ValueError('zero axial RMS cannot support nonzero shear covariance')
+    minimum = .5*variance
+    minimum[positive] += .5*shear_squared[positive]/variance[positive]
+    if not np.all(np.isfinite(minimum)):
+        raise ValueError('TKE lower bound overflows the supplied numerical range')
+    return dict(minimum_tke=minimum, axial_variance=variance,
+                uses_isotropy=False, physical_closure=False)
+
+
+def minimum_tke_from_two_normal_rms(axial_rms, transverse_rms):
+    """Sharp TKE lower bound from two observed normal RMS components.
+
+    If axial and one transverse velocity fluctuations are observed,
+
+        k >= 0.5 * (R_ss + R_perp_perp).
+
+    The unobserved second transverse normal stress and every covariance are
+    not completed: their smallest realizable values are zero.  This is only a
+    lower bound, not an isotropy assumption, Reynolds-stress model, or
+    dissipation closure.  It is useful when a publication supplies plotted
+    axial and radial RMS profiles but no covariance tensor.
+    """
+    axial = np.asarray(axial_rms, float)
+    transverse = np.asarray(transverse_rms, float)
+    if (axial.ndim != 1 or transverse.shape != axial.shape
+            or not np.all(np.isfinite(axial))
+            or not np.all(np.isfinite(transverse))
+            or np.any(axial < 0.) or np.any(transverse < 0.)):
+        raise ValueError('matching finite nonnegative axial and transverse RMS arrays required')
+    axial_variance = axial*axial
+    transverse_variance = transverse*transverse
+    minimum = .5*(axial_variance + transverse_variance)
+    if not np.all(np.isfinite(minimum)):
+        raise ValueError('TKE lower bound overflows the supplied numerical range')
+    return dict(minimum_tke=minimum, axial_variance=axial_variance,
+                transverse_variance=transverse_variance,
+                unmeasured_normal_variance_lower_bound=np.zeros_like(minimum),
+                uses_isotropy=False, physical_closure=False)
+
+
 def normal_work_interval(shear_bound_flux, tke_flux):
     """Sharp admissible N interval given B and K; stable at large K/B.
 

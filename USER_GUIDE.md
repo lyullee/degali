@@ -160,6 +160,13 @@ source diameter. It does not independently predict time-dependent pool growth
 and evaporation from a liquid spill rate. Obtain `rate` and `pool_diameter`
 from a separate source model or a documented conservative assumption.
 
+For a declared evaporation history, `assess_pool_history()` preserves the
+quasi-steady snapshots. If a receptor and a user-supplied response time are
+available, `response_time_s=...` additionally applies a causal first-order
+observation kernel and returns `receptor_transient_mole_fraction`. This is a
+low-order research surrogate, not transient CFD, and the response time is not
+automatically inferred from validation data.
+
 ## 5. Interpreting the result
 
 The principal `Assessment` attributes are:
@@ -174,6 +181,33 @@ The principal `Assessment` attributes are:
 | `trajectory` | NumPy array with columns `[x, z, centreline mole fraction]` |
 | `warnings` | Applicability or validation-range warnings |
 | `notes` | Source description, model path, and post-flash hydrogen mass fraction |
+
+`result.screening_scope` is `qualified`, `conditional`, or `out_of_scope`.
+For an application that must never consume an extrapolated number, pass
+`strict_scope=True`; this raises `ApplicabilityError` whenever a validation
+range warning is generated. The default warning mode is useful for research
+and sensitivity work but is not an approval decision.
+
+### 5.1.1 Comparing DEGALI with another model
+
+Use `degali.validation.compare_models` when an independently generated HyRAM,
+PHAST, EFFECTS or CFD result is available. `ComparisonCase` records the source
+definition, wind vector, release height, receptor operator, averaging window,
+phase closure and geometry. A model with different metadata, or a prediction
+fitted to the observations, is still scored for diagnosis but is excluded from
+the superiority ranking. This prevents a general accuracy claim from being
+made from non-equivalent runs.
+
+For a single measured centreline point, `assess_observation_envelope()` enumerates
+caller-declared source-rate and wind hypotheses and returns every one within a
+specified factor of the observation. Multiple matches are explicitly marked
+non-identifiable; the function does not fit or select a correction.
+Sensor-height and arc-maximum observations require a separate validated
+observation operator.
+For declared mast coordinates `(x, y, z)`,
+`project_lh2_jet_to_sensors(points_m=[...])` evaluates the jet's Gaussian
+vertical/lateral profile directly and returns concentration and temperature;
+points outside the integrated trajectory remain `nan`.
 
 A `nan` result usually means that no crossing of the requested concentration
 was found within the integration domain; it does not necessarily mean that the
@@ -275,6 +309,26 @@ with open("wind_sensitivity.csv", "w", newline="", encoding="utf-8") as f:
 Record model version, all inputs, units, and warnings with the results. Cache
 completed scenarios rather than recalculating identical cases.
 
+For explicit source/wind uncertainty, use the deterministic envelope helper.
+The caller supplies the credible values; DEGALI does not invent a percentage
+or fit a multiplier:
+
+```python
+from degali.lh2 import assess_envelope
+
+envelope = assess_envelope(
+    rates=[0.25, 0.285, 0.32],
+    winds=[2.3, 2.5, 2.7],
+    height=0.50, orifice=0.0254, storage_pressure=6.0,
+    max_distance=6.0,
+)
+print(envelope.distance_to_lfl_range)
+print(envelope.screening_scope, envelope.warnings)
+```
+
+This is an input-sensitivity envelope, not a confidence interval and not a
+calibration to FFI Test 6.
+
 ## 7. Validation range and warnings
 
 The public `assess()` path checks the following directly evaluated ranges:
@@ -292,12 +346,55 @@ defend.
 
 The present model is not a standalone design basis for:
 
-- buildings, obstacles, wakes, or complex terrain;
+- buildings, obstacles, wakes, or complex terrain (the optional geometry
+  screen below only detects centre-trajectory contact; it is not a wake model);
 - indoor or partially confined releases;
-- arbitrary directions, strongly crosswind jets, or downward impinging jets;
+- the default `assess()` path for arbitrary directions, strongly crosswind
+  jets, or downward impinging jets. A separate `run_lh2_yawed_crosswind_research()`
+  path can integrate a horizontal yawed release, but it is research-only and
+  remains unvalidated for quantitative design use;
 - independent pool spreading and evaporation-rate prediction;
 - all possible equipment conditions or certified consequence assessment;
 - ignition, flame, thermal radiation, or explosion overpressure.
+
+### 7.1 Research-only site-geometry screen
+
+For a separately calculated three-dimensional centre trajectory, the optional
+geometry screen can identify where an **unobstructed** integral-plume result
+ceases to apply. Coordinates are global `(x, y, z)` metres. A wind-frame angle
+is a **towards** bearing in radians, counter-clockwise from global `+x`.
+
+```python
+from degali.addons import (
+    AxisAlignedCuboid, TransverseWall, WindFrame, screen_trajectory,
+)
+
+path = [(0.0, 0.0, 1.0), (4.0, 0.0, 1.2), (8.0, 0.2, 1.8)]
+obstacles = [
+    AxisAlignedCuboid(3.0, 4.5, -0.8, 0.8, 0.0, 3.0, label="compressor"),
+    TransverseWall(WindFrame(direction_rad=0.0), downwind_m=6.0,
+                   base_height_m=0.0, height_m=2.5, half_width_m=None),
+]
+screen = screen_trajectory(path, obstacles)
+if not screen.free_plume_prediction_applicable:
+    first = screen.encounters[0]
+    print(first.obstacle_label, first.entry_point_m)
+    # Do not report the unobstructed concentration field beyond this point.
+    assert screen.free_plume_applicable_through(first.entry_arc_length_m - 1e-6)
+```
+
+`half_width_m=None` represents an ideal laterally unbounded wall. Its reported
+`required_overflight_height_m` is only the minimum geometric clearance for a
+continuous centre path. It is not a calculated plume rise. A finite wall may
+be passed around or over; the screen deliberately does not choose either
+route. `YawedTrajectory.obstacle_screen(obstacles)` is an equivalent shortcut
+after an opt-in `YawedCrosswind` calculation.
+
+The screen never applies a wake factor, bypass fraction, wall heat-transfer
+term, reflected scalar field, or obstacle-adjusted concentration. A clear
+centreline does not establish clearance of the full Gaussian envelope. Use an
+obstacle-resolved, separately validated analysis for a downstream building or
+wall concentration prediction.
 
 ## 8. DEGADIS-compatible input decks
 
@@ -485,8 +582,8 @@ import degali
 print(degali.__version__)
 ```
 
-The DEGALI 0.1.0 version DOI is
-[`10.5281/zenodo.22646259`](https://doi.org/10.5281/zenodo.22646259). The
+The DEGALI 0.2.0 version DOI is
+[`10.5281/zenodo.23105451`](https://doi.org/10.5281/zenodo.23105451). The
 concept DOI for all DEGALI versions is
 [`10.5281/zenodo.22646258`](https://doi.org/10.5281/zenodo.22646258).
 

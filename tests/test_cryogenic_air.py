@@ -6,14 +6,22 @@ import pytest
 
 from degali.addons.cryogenic_air import (
     air_saturation_pressure,
+    advance_two_velocity_phase_step,
+    cunningham_corrected_particle_relaxation_time,
+    davies_cunningham_slip_correction,
     equilibrium_air_phase_split,
+    n2o2_condensed_phase_scope,
     li2026_zone3,
     multiphase_hydrogen_evaporation_endpoint,
     multiphase_hydrogen_source_plane,
     minimum_heat_limited_sublimation_time,
     particle_relaxation_time,
     particle_terminal_velocity,
+    particle_knudsen_number,
     ranz_marshall_transfer_number,
+    relax_two_velocity_drag,
+    relax_two_velocity_schiller_naumann_drag,
+    schiller_naumann_relaxation_time,
     transported_condensed_air_source,
 )
 from degali.addons.notional import (
@@ -27,6 +35,7 @@ from degali.addons.lh2_droplets import (
     flashing_hydrogen_droplet_source,
     gasflow_phase_relaxation_coefficient,
     homogeneous_equilibrium_hydrogen_source,
+    homogeneous_equilibrium_hydrogen_source_from_postflash,
     minimum_heat_limited_hydrogen_evaporation_time,
 )
 from degali.validation.hecht_panda import load_data as load_hecht_panda_data
@@ -85,6 +94,18 @@ def test_measured_lh2_pipe_source_retains_residual_liquid():
     assert central.energy_residual < 1e-12
 
 
+def test_flash_rejects_a_mass_flow_and_pressure_thrust_that_overextract_energy():
+    pytest.importorskip("CoolProp")
+    with pytest.raises(ValueError, match="mass-flow/throat-momentum"):
+        flashing_hydrogen_droplet_source(
+            mass_flow=0.2,
+            orifice_diameter=0.004,
+            upstream_temperature=80.0,
+            upstream_pressure=20.0e6,
+            ambient_temperature=293.0,
+        )
+
+
 def test_lh2_fastest_evaporation_lifetime_is_a_diameter_squared_bound():
     pytest.importorskip("CoolProp")
     common = dict(
@@ -135,6 +156,32 @@ def test_collective_lh2_evaporation_bound_starts_after_liquid_is_spent():
     assert bound.total_mass_residual < 1e-12
     assert bound.momentum_residual < 1e-12
     assert bound.energy_residual < 1e-12
+
+
+def test_supercritical_hydrogen_postflash_reaches_the_same_phase_safe_handoff():
+    """A measured 80 K compressed-gas state must not masquerade as LH2 storage."""
+    pytest.importorskip("CoolProp")
+    postflash = flashing_hydrogen_droplet_source(
+        mass_flow=0.35033891417451984,
+        orifice_diameter=0.004,
+        upstream_temperature=80.0,
+        upstream_pressure=201.72256977519947e5,
+        ambient_temperature=293.0,
+    )
+    source = homogeneous_equilibrium_hydrogen_source_from_postflash(
+        postflash, ambient_temperature=293.0,
+    )
+    assert 0.0 < postflash.postflash_quality < 1.0
+    assert postflash.liquid_mass_flow > 0.0
+    assert source.formation_distance > 0.0
+    assert source.source.temperature == pytest.approx(20.368903539, rel=1e-9)
+    assert 0.0 < source.source.mass_fraction < 1.0
+    assert max(
+        source.hydrogen_mass_residual,
+        source.total_mass_residual,
+        source.momentum_residual,
+        source.energy_residual,
+    ) < 1e-12
 
 
 def test_collective_equilibrium_endpoint_does_not_fit_droplet_size():
@@ -397,6 +444,8 @@ def test_equilibrium_split_freezes_both_bulk_air_species_at_lh2_temperature():
     assert split.oxygen_gas_flow + split.oxygen_condensed_flow == (
         pytest.approx(0.975, rel=1e-12)
     )
+    scope = n2o2_condensed_phase_scope(split)
+    assert scope.classification == "co_condensed_subtriple_n2o2_mixture_unsupported"
 
 
 def test_equilibrium_split_makes_oxygen_the_last_bulk_air_phase_boundary():
@@ -411,6 +460,47 @@ def test_equilibrium_split_makes_oxygen_the_last_bulk_air_phase_boundary():
     assert cold.nitrogen_condensed_flow == pytest.approx(0.0, abs=1e-12)
     assert cold.oxygen_condensed_flow > 0.1
     assert warm.condensed_flow == pytest.approx(0.0, abs=1e-12)
+
+
+def test_n2o2_scope_does_not_promote_separate_condensates_to_a_mixture_eos():
+    all_gas = equilibrium_air_phase_split(
+        temperature=90.0, pressure=101325.0, hydrogen_flow=1.0,
+        nitrogen_flow=3.025, oxygen_flow=0.975,
+    )
+    all_gas_scope = n2o2_condensed_phase_scope(all_gas)
+    assert all_gas_scope.classification == "uncondensed_bulk_air"
+    assert all_gas_scope.separate_pure_component_closure_usable
+
+    oxygen_only = equilibrium_air_phase_split(
+        temperature=68.0, pressure=101325.0, hydrogen_flow=1.0,
+        nitrogen_flow=3.025, oxygen_flow=0.975,
+    )
+    oxygen_scope = n2o2_condensed_phase_scope(oxygen_only)
+    assert oxygen_scope.classification == "single_component_condensate_bound"
+    assert oxygen_scope.oxygen_condensed and not oxygen_scope.nitrogen_condensed
+    assert not oxygen_scope.separate_pure_component_closure_usable
+
+    mixed = equilibrium_air_phase_split(
+        temperature=23.0, pressure=101325.0, hydrogen_flow=1.0,
+        nitrogen_flow=3.025, oxygen_flow=0.975,
+    )
+    mixed_scope = n2o2_condensed_phase_scope(mixed)
+    assert mixed_scope.classification == (
+        "co_condensed_subtriple_n2o2_mixture_unsupported"
+    )
+    assert mixed_scope.mixture_thermodynamics_required
+    assert 0.0 < mixed_scope.condensed_nitrogen_mole_fraction < 1.0
+    assert not mixed_scope.separate_pure_component_closure_usable
+
+
+def test_hydrogen_evaporation_endpoint_carries_its_mixed_phase_scope():
+    endpoint = multiphase_hydrogen_evaporation_endpoint(
+        storage_temperature=27.0, ambient_temperature=288.0,
+    )
+    assert endpoint.n2o2_phase_scope.classification == (
+        "co_condensed_subtriple_n2o2_mixture_unsupported"
+    )
+    assert endpoint.n2o2_phase_scope.mixture_thermodynamics_required
 
 
 def test_particle_response_bounds_span_carried_to_settling_regimes():
@@ -435,6 +525,332 @@ def test_particle_response_bounds_span_carried_to_settling_regimes():
     assert settling[2] > 0.5
     # Nonlinear drag must reduce the 100-um result below its Stokes estimate.
     assert settling[2] < relaxation[2] * 9.80665
+
+
+def test_declared_rarefaction_slip_corrects_only_the_low_re_response_time():
+    diameter = 1e-6
+    mean_free_path = .05e-6
+    knudsen = particle_knudsen_number(
+        mean_free_path=mean_free_path, diameter=diameter,
+    )
+    correction = davies_cunningham_slip_correction(
+        mean_free_path=mean_free_path, diameter=diameter,
+    )
+    stokes = particle_relaxation_time(
+        diameter=diameter, particle_density=800.0, gas_viscosity=4e-6,
+    )
+    corrected = cunningham_corrected_particle_relaxation_time(
+        diameter=diameter, particle_density=800.0, gas_viscosity=4e-6,
+        mean_free_path=mean_free_path,
+    )
+    assert knudsen == pytest.approx(.1)
+    assert correction == pytest.approx(
+        1.0 + .1 * (1.257 + .4 * math.exp(-11.0)), rel=1e-15,
+    )
+    assert corrected == pytest.approx(stokes * correction, rel=1e-15)
+    assert davies_cunningham_slip_correction(
+        mean_free_path=.05e-6, diameter=1e-3,
+    ) < 1.001
+    with pytest.raises(ValueError, match="positive"):
+        particle_knudsen_number(mean_free_path=0.0, diameter=diameter)
+
+
+def test_schiller_naumann_relaxation_is_a_finite_re_local_stokes_limit():
+    common = dict(
+        diameter=1e-4, particle_density=800.0, gas_density=.4,
+        gas_viscosity=4e-6,
+    )
+    stokes = particle_relaxation_time(
+        diameter=common["diameter"],
+        particle_density=common["particle_density"],
+        gas_viscosity=common["gas_viscosity"],
+    )
+    at_rest = schiller_naumann_relaxation_time(
+        **common, relative_velocity=0.0,
+    )
+    finite_re = schiller_naumann_relaxation_time(
+        **common, relative_velocity=20.0,
+    )
+    assert at_rest == pytest.approx(stokes, rel=1e-15)
+    assert finite_re < stokes
+    # Reynolds number here is 200: use the declared finite-Re multiplier,
+    # rather than silently applying a terminal-velocity relation.
+    assert finite_re == pytest.approx(
+        stokes / (1.0 + .15 * 200.0**.687), rel=1e-14,
+    )
+    assert schiller_naumann_relaxation_time(
+        **common, relative_velocity=-20.0,
+    ) == pytest.approx(finite_re, rel=1e-14)
+
+    with pytest.raises(ValueError, match="Reynolds"):
+        schiller_naumann_relaxation_time(
+            **common, relative_velocity=100.1,
+        )
+    with pytest.raises(ValueError, match="finite"):
+        schiller_naumann_relaxation_time(
+            **common, relative_velocity=math.nan,
+        )
+
+
+def test_exact_finite_re_two_velocity_drag_conserves_and_exceeds_stokes_drag():
+    properties = dict(
+        diameter=1e-4, particle_density=800.0, gas_density=.4,
+        gas_viscosity=4e-6,
+    )
+    stokes_time = particle_relaxation_time(
+        diameter=properties["diameter"],
+        particle_density=properties["particle_density"],
+        gas_viscosity=properties["gas_viscosity"],
+    )
+    finite_re = relax_two_velocity_schiller_naumann_drag(
+        gas_mass_flow=2.0, particle_mass_flow=.5,
+        gas_velocity=80.0, particle_velocity=60.0,
+        duration=.02, **properties,
+    )
+    stokes = relax_two_velocity_drag(
+        gas_mass_flow=2.0, particle_mass_flow=.5,
+        gas_velocity=80.0, particle_velocity=60.0,
+        duration=.02, particle_relaxation=stokes_time,
+    )
+    assert finite_re.momentum_after == pytest.approx(finite_re.momentum_before)
+    assert finite_re.kinetic_energy_after + finite_re.thermalised_kinetic_energy == (
+        pytest.approx(finite_re.kinetic_energy_before)
+    )
+    assert 60.0 < finite_re.particle_velocity < finite_re.gas_velocity < 80.0
+    # At the declared initial Re=200, finite-Re drag reduces slip more than
+    # the Stokes-only update over the same constant-property interval.
+    assert (
+        finite_re.gas_velocity - finite_re.particle_velocity
+        < stokes.gas_velocity - stokes.particle_velocity
+    )
+
+    with pytest.raises(ValueError, match="Reynolds"):
+        relax_two_velocity_schiller_naumann_drag(
+            gas_mass_flow=2.0, particle_mass_flow=.5,
+            gas_velocity=160.1, particle_velocity=60.0,
+            duration=.02, **properties,
+        )
+
+
+def test_two_velocity_drag_relaxation_conserves_momentum_and_heats_slip():
+    result = relax_two_velocity_drag(
+        gas_mass_flow=2.0, particle_mass_flow=.5,
+        gas_velocity=80.0, particle_velocity=20.0,
+        duration=.1, particle_relaxation=.05,
+    )
+    assert result.momentum_after == pytest.approx(result.momentum_before)
+    assert result.kinetic_energy_after < result.kinetic_energy_before
+    assert result.thermalised_kinetic_energy > 0.0
+    assert result.kinetic_energy_after + result.thermalised_kinetic_energy == (
+        pytest.approx(result.kinetic_energy_before)
+    )
+    assert 20.0 < result.particle_velocity < result.gas_velocity < 80.0
+
+
+def test_two_velocity_drag_has_exact_single_phase_and_long_time_limits():
+    no_particle = relax_two_velocity_drag(
+        gas_mass_flow=2.0, particle_mass_flow=0.0,
+        gas_velocity=80.0, particle_velocity=-500.0,
+        duration=10.0, particle_relaxation=.01,
+    )
+    assert no_particle.gas_velocity == 80.0
+    assert no_particle.particle_velocity == -500.0
+    assert no_particle.thermalised_kinetic_energy == 0.0
+
+    long_time = relax_two_velocity_drag(
+        gas_mass_flow=2.0, particle_mass_flow=.5,
+        gas_velocity=80.0, particle_velocity=20.0,
+        duration=10.0, particle_relaxation=.01,
+    )
+    assert long_time.gas_velocity == pytest.approx(68.0)
+    assert long_time.particle_velocity == pytest.approx(68.0)
+    with pytest.raises(ValueError, match="relaxation"):
+        relax_two_velocity_drag(
+            gas_mass_flow=2.0, particle_mass_flow=.5,
+            gas_velocity=80.0, particle_velocity=20.0,
+            duration=.1, particle_relaxation=0.0,
+        )
+
+
+def test_two_velocity_phase_step_separates_entrainment_and_drag_heating():
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=2.0, particle_mass_flow=.5,
+        gas_velocity=80.0, particle_velocity=20.0,
+        entrained_gas_mass_flow=1.0, entrained_gas_velocity=0.0,
+        final_particle_mass_flow=1.0,
+        duration=.1, particle_relaxation=.05,
+    )
+    assert result.gas_mass_flow == pytest.approx(2.5)
+    assert result.particle_mass_flow == pytest.approx(1.0)
+    assert result.momentum_after == pytest.approx(result.momentum_before)
+    assert result.entrainment_thermalised_kinetic_energy > 0.0
+    assert result.phase_transfer_thermalised_kinetic_energy > 0.0
+    assert result.drag_thermalised_kinetic_energy > 0.0
+    assert result.total_thermalised_kinetic_energy == pytest.approx(
+        result.entrainment_thermalised_kinetic_energy
+        + result.phase_transfer_thermalised_kinetic_energy
+        + result.drag_thermalised_kinetic_energy
+    )
+    assert result.kinetic_energy_after + result.total_thermalised_kinetic_energy == (
+        pytest.approx(result.kinetic_energy_before)
+    )
+
+
+def test_two_velocity_phase_step_handles_re_evaporation_without_impulse():
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=2.0, particle_mass_flow=1.0,
+        gas_velocity=60.0, particle_velocity=10.0,
+        entrained_gas_mass_flow=.5, entrained_gas_velocity=0.0,
+        final_particle_mass_flow=.25,
+        duration=.0, particle_relaxation=.05,
+    )
+    assert result.gas_mass_flow == pytest.approx(3.25)
+    assert result.particle_mass_flow == pytest.approx(.25)
+    assert result.momentum_after == pytest.approx(result.momentum_before)
+    assert result.drag_thermalised_kinetic_energy == 0.0
+    assert result.total_thermalised_kinetic_energy == pytest.approx(
+        result.entrainment_thermalised_kinetic_energy
+        + result.phase_transfer_thermalised_kinetic_energy
+    )
+    with pytest.raises(ValueError, match="positive gas"):
+        advance_two_velocity_phase_step(
+            gas_mass_flow=2.0, particle_mass_flow=.5,
+            gas_velocity=80.0, particle_velocity=20.0,
+            entrained_gas_mass_flow=0.0, entrained_gas_velocity=0.0,
+            final_particle_mass_flow=2.5,
+            duration=.1, particle_relaxation=.05,
+        )
+
+
+def test_two_velocity_phase_step_handles_complete_re_evaporation_limit():
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=2.0, particle_mass_flow=1.0,
+        gas_velocity=60.0, particle_velocity=10.0,
+        entrained_gas_mass_flow=.5, entrained_gas_velocity=0.0,
+        final_particle_mass_flow=0.0,
+        duration=.1, particle_relaxation=.05,
+    )
+    # Re-evaporated mass joins the gas at the particle velocity.  With no
+    # particle inventory left, the drag term must vanish rather than using the
+    # stale particle velocity in a fictitious force.
+    assert result.gas_mass_flow == pytest.approx(3.5)
+    assert result.particle_mass_flow == 0.0
+    assert result.gas_velocity == pytest.approx(
+        result.momentum_before / result.gas_mass_flow
+    )
+    assert result.momentum_after == pytest.approx(result.momentum_before)
+    assert result.phase_transfer_thermalised_kinetic_energy > 0.0
+    assert result.drag_thermalised_kinetic_energy == 0.0
+    assert result.total_thermalised_kinetic_energy == pytest.approx(
+        result.entrainment_thermalised_kinetic_energy
+        + result.phase_transfer_thermalised_kinetic_energy
+    )
+    assert result.kinetic_energy_after + result.total_thermalised_kinetic_energy == (
+        pytest.approx(result.kinetic_energy_before)
+    )
+
+
+def test_two_velocity_phase_step_conserves_declared_coflow_entrainment():
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=2.0, particle_mass_flow=0.0,
+        gas_velocity=80.0, particle_velocity=-1.0,
+        entrained_gas_mass_flow=1.0, entrained_gas_velocity=30.0,
+        final_particle_mass_flow=0.0,
+        duration=.1, particle_relaxation=.05,
+    )
+    # The ambient stream supplies real incoming axial momentum/KE.  The
+    # resolved loss is the inelastic two-gas mixing loss, not a spurious loss
+    # from treating a 30 m/s coflow as a zero-velocity reservoir.
+    assert result.momentum_before == pytest.approx(190.0)
+    assert result.momentum_after == pytest.approx(190.0)
+    assert result.entrained_gas_mass_flow == 1.0
+    assert result.entrained_gas_velocity == 30.0
+    assert result.gas_velocity == pytest.approx(190.0 / 3.0)
+    assert result.entrainment_thermalised_kinetic_energy == pytest.approx(
+        .5 * (2.0 / 3.0) * (80.0 - 30.0)**2
+    )
+    assert result.phase_transfer_thermalised_kinetic_energy == 0.0
+    assert result.drag_thermalised_kinetic_energy == 0.0
+    assert result.kinetic_energy_after + result.total_thermalised_kinetic_energy == (
+        pytest.approx(result.kinetic_energy_before)
+    )
+
+
+@pytest.mark.parametrize(
+    "gas,particle,ug,up,entrained,ue,final_particle",
+    [
+        (1.0, .3, 60.0, 10.0, .5, -20.0, .7),
+        (2.0, 1.0, -20.0, 30.0, .7, 40.0, .2),
+    ],
+)
+def test_two_velocity_phase_step_preserves_co_and_counterflow_ledgers(
+    gas, particle, ug, up, entrained, ue, final_particle,
+):
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=gas, particle_mass_flow=particle,
+        gas_velocity=ug, particle_velocity=up,
+        entrained_gas_mass_flow=entrained, entrained_gas_velocity=ue,
+        final_particle_mass_flow=final_particle,
+        duration=.04, particle_relaxation=.07,
+    )
+    incoming_momentum = gas * ug + particle * up + entrained * ue
+    assert result.momentum_before == pytest.approx(incoming_momentum)
+    assert result.momentum_after == pytest.approx(incoming_momentum)
+    assert result.entrainment_thermalised_kinetic_energy >= 0.0
+    assert result.phase_transfer_thermalised_kinetic_energy >= 0.0
+    assert result.drag_thermalised_kinetic_energy >= 0.0
+    assert result.kinetic_energy_after + result.total_thermalised_kinetic_energy == (
+        pytest.approx(result.kinetic_energy_before)
+    )
+
+
+def test_two_velocity_phase_step_recovers_the_existing_single_gas_entrainment_limit():
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=2.0, particle_mass_flow=0.0,
+        gas_velocity=80.0, particle_velocity=-1.0,
+        entrained_gas_mass_flow=1.0, entrained_gas_velocity=0.0,
+        final_particle_mass_flow=0.0,
+        duration=.1, particle_relaxation=.05,
+    )
+    assert result.gas_mass_flow == pytest.approx(3.0)
+    assert result.gas_velocity == pytest.approx(2.0 * 80.0 / 3.0)
+    assert result.particle_velocity == -1.0
+    assert result.phase_transfer_thermalised_kinetic_energy == 0.0
+    assert result.drag_thermalised_kinetic_energy == 0.0
+    assert result.total_thermalised_kinetic_energy == pytest.approx(
+        result.entrainment_thermalised_kinetic_energy
+    )
+
+
+@pytest.mark.parametrize(
+    "gas,particle,ug,up,entrained,final_particle,duration,tau",
+    [
+        (1.0, 0.0, 40.0, -20.0, .5, .2, .03, .2),
+        (2.0, .7, -15.0, 30.0, .1, 1.1, .2, .04),
+        (3.0, 1.5, 4.0, -8.0, 2.0, .3, .0, .3),
+        (.2, .4, 150.0, 20.0, .8, 1.0, .4, .01),
+    ],
+)
+def test_two_velocity_phase_step_has_nonnegative_partitioned_losses(
+    gas, particle, ug, up, entrained, final_particle, duration, tau,
+):
+    result = advance_two_velocity_phase_step(
+        gas_mass_flow=gas, particle_mass_flow=particle,
+        gas_velocity=ug, particle_velocity=up,
+        entrained_gas_mass_flow=entrained, entrained_gas_velocity=0.0,
+        final_particle_mass_flow=final_particle,
+        duration=duration, particle_relaxation=tau,
+    )
+    assert result.momentum_after == pytest.approx(result.momentum_before)
+    assert result.entrainment_thermalised_kinetic_energy >= 0.0
+    assert result.phase_transfer_thermalised_kinetic_energy >= 0.0
+    assert result.drag_thermalised_kinetic_energy >= 0.0
+    assert result.total_thermalised_kinetic_energy == pytest.approx(
+        result.entrainment_thermalised_kinetic_energy
+        + result.phase_transfer_thermalised_kinetic_energy
+        + result.drag_thermalised_kinetic_energy,
+        abs=1e-10,
+    )
 
 
 def test_ranz_marshall_transfer_number_has_conduction_and_forced_limits():
@@ -562,6 +978,49 @@ def test_subcooled_hydrogen_throat_uses_independent_temperature_and_pressure():
     assert throat.pressure == pytest.approx(101325.0, rel=1e-8)
     assert not throat.choked
     assert throat.relative_energy_residual < 1e-12
+
+
+def test_supercritical_hydrogen_throat_requires_explicit_pure_gas_scope():
+    """Cold compressed H2 has a measured P/T state, not a saturated state."""
+    with pytest.raises(ValueError, match="allow_supercritical_gas"):
+        isentropic_throat(
+            fluid="Hydrogen", storage_temperature=80.0,
+            storage_pressure=20.0e6,
+        )
+
+    throat = isentropic_throat(
+        fluid="Hydrogen", storage_temperature=80.0,
+        storage_pressure=20.0e6, allow_supercritical_gas=True,
+    )
+    from CoolProp.CoolProp import PropsSI
+
+    for factor in (0.999, 1.001):
+        pressure = throat.pressure * factor
+        enthalpy = PropsSI("H", "P", pressure, "S", throat.storage_entropy, "Hydrogen")
+        density = PropsSI("D", "P", pressure, "S", throat.storage_entropy, "Hydrogen")
+        velocity = math.sqrt(2.0 * (throat.storage_enthalpy - enthalpy))
+        assert density * velocity <= throat.mass_flux * (1.0 + 1.0e-8)
+    assert throat.choked
+    assert throat.relative_energy_residual < 1e-12
+
+
+def test_supercritical_ideal_throat_can_reach_the_notional_source_plane():
+    throat = isentropic_throat(
+        fluid="Hydrogen", storage_temperature=80.0,
+        storage_pressure=20.0e6, allow_supercritical_gas=True,
+    )
+    area = math.pi * 0.004**2 / 4.0
+    nozzle = energy_conserving_notional_nozzle(
+        fluid="Hydrogen", storage_temperature=80.0,
+        storage_pressure=20.0e6,
+        mass_flow=throat.mass_flux * area,
+        orifice_diameter=0.004, allow_supercritical_gas=True,
+    )
+    assert nozzle.admissible
+    assert nozzle.discharge_coefficient == pytest.approx(1.0, abs=1e-9)
+    assert nozzle.relative_mass_residual < 1e-12
+    assert nozzle.relative_momentum_residual < 1e-12
+    assert nozzle.relative_energy_residual < 1e-12
 
 
 def test_subcooled_hydrogen_notional_nozzle_is_admissible():
@@ -846,6 +1305,9 @@ def test_transported_condensed_air_particle_bound_conserves_and_settles_more():
         assert result.maximum_mass_residual < 1e-6
         assert result.maximum_momentum_residual < 1e-6
         assert result.maximum_energy_residual < 1e-6
+        assert result.axial_kinematic_limit == "no_slip_retained_condensate_limit"
+        assert not result.finite_particle_slip_modelled
+        assert not result.quantitative_lh2_prediction_allowed
         dropped.append(
             result.nitrogen_dropped_flow + result.oxygen_dropped_flow
         )

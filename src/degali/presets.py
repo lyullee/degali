@@ -142,8 +142,9 @@ LIQUID_HYDROGEN = Preset(
     ),
     applicability=Applicability(
         summary=(
-            "momentum-dominated flashing releases, 0.79 to 6 m downwind; "
-            "buoyancy regime checked against the NASA spills"
+            "primary jet concentration evidence at 0.79 to 6 m downwind; "
+            "a separate 30--100 m FFI regime screen and NASA pool buoyancy "
+            "check are not universal far-field accuracy claims"
         ),
         limits={
             **RANGE["jet"],

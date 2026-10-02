@@ -74,6 +74,57 @@ def phase_ambient_from_rh(
     return mw_dry, humidity, pressure * mw_humid / (R_UNIVERSAL * temperature)
 
 
+_WATER_MOLAR_MASS = WMW_MODERN / 1000.0
+# IAPWS R10-06 Table 6: ice-Ih density at the water triple point.  It is
+# retained as a constant phase-volume limit; this is not a porous-frost model.
+_WATER_ICE_DENSITY = 916.7094922
+
+
+def _water_ice_sublimation_enthalpy(temperature: float) -> float:
+    """Return the Murphy--Koop ice sublimation enthalpy in J/kg.
+
+    Their heat-capacity expression is stated for ``T > 30 K``.  The property
+    grid extends to 14.1 K to cover a cryogenic-H2 limiting calculation, so
+    below 30 K the 30-K value is deliberately continued as a transparent
+    constant-latent approximation; it is not presented as measured ice data.
+    """
+    value = max(float(temperature), 30.0)
+    latent_molar = (
+        46782.5 + 35.8925 * value - 0.07414 * value**2
+        + 541.5 * math.exp(-(value / 123.75)**2)
+    )
+    return latent_molar / _WATER_MOLAR_MASS
+
+
+def _water_ice_saturation_pressure(temperature: float) -> float:
+    """Stable H2O ice-vapour pressure in Pa for the phase table.
+
+    Murphy and Koop (2005), equation 7, is used in its published ``T > 110
+    K`` domain.  Below 110 K no fitted water-ice pressure is silently
+    extrapolated: a Clausius--Clapeyron continuation is anchored at 110 K
+    with that boundary's sublimation enthalpy.  The result is sufficient for
+    the equilibrium limiting screen, not a finite-rate frost model.
+    """
+    value = float(temperature)
+    if value <= 0.0 or not math.isfinite(value):
+        raise ValueError("water-ice temperature must be finite and positive")
+
+    def murphy_koop_ice(temp: float) -> float:
+        return math.exp(
+            9.550426 - 5723.265 / temp + 3.53068 * math.log(temp)
+            - 0.00728332 * temp
+        )
+
+    if value >= 110.0:
+        return murphy_koop_ice(value)
+    reference_temperature = 110.0
+    return murphy_koop_ice(reference_temperature) * math.exp(
+        -_water_ice_sublimation_enthalpy(reference_temperature)
+        * _WATER_MOLAR_MASS / R_UNIVERSAL
+        * (1.0 / value - 1.0 / reference_temperature)
+    )
+
+
 @lru_cache(maxsize=8)
 def _ideal_component_enthalpy_table(
     species: str,
@@ -164,10 +215,17 @@ def _ideal_gas_enthalpy_table(
     return temperature, enthalpies[0], enthalpies[1]
 
 
-@lru_cache(maxsize=1)
-def _air_phase_property_table() -> dict[str, np.ndarray]:
+@lru_cache(maxsize=2)
+def _air_phase_property_table(
+    water_ice_property_model: str = "murphy_koop_2005",
+) -> dict[str, np.ndarray]:
     """Stable N2/O2/Ar/H2O saturation and condensed-property table."""
     from CoolProp.CoolProp import PropsSI
+
+    if water_ice_property_model not in {
+        "murphy_koop_2005", "legacy_pre_murphy_koop_v1",
+    }:
+        raise ValueError("unknown water-ice property model")
 
     from .cryogenic_air import (
         _CRITICAL_TEMPERATURE,
@@ -250,24 +308,29 @@ def _air_phase_property_table() -> dict[str, np.ndarray]:
     out["argon_density"] = np.array(argon_density)
 
     water_triple = 273.16
-    water_triple_pressure = float(
-        PropsSI("P", "T", water_triple, "Q", 0, "Water")
-    )
-    legacy_triple_pressure = math.exp(
-        14.683943 - 5407.0 / water_triple
-    ) * 101325.0
+    if water_ice_property_model == "legacy_pre_murphy_koop_v1":
+        water_triple_pressure = float(
+            PropsSI("P", "T", water_triple, "Q", 0, "Water")
+        )
+        legacy_triple_pressure = math.exp(
+            14.683943 - 5407.0 / water_triple
+        ) * 101325.0
     water_saturation, water_latent, water_density = [], [], []
     for value in temperature:
         if value < water_triple:
-            water_saturation.append(
-                math.exp(14.683943 - 5407.0 / float(value))
-                * 101325.0 * water_triple_pressure
-                / legacy_triple_pressure
-            )
-            water_latent.append(
-                DHVAP + DHFUS * min((273.15 - float(value)) / 10.0, 1.0)
-            )
-            water_density.append(RHOWL)
+            if water_ice_property_model == "legacy_pre_murphy_koop_v1":
+                water_saturation.append(
+                    math.exp(14.683943 - 5407.0 / float(value))
+                    * 101325.0 * water_triple_pressure / legacy_triple_pressure
+                )
+                water_latent.append(
+                    DHVAP + DHFUS * min((273.15 - float(value)) / 10.0, 1.0)
+                )
+                water_density.append(RHOWL)
+            else:
+                water_saturation.append(_water_ice_saturation_pressure(float(value)))
+                water_latent.append(_water_ice_sublimation_enthalpy(float(value)))
+                water_density.append(_WATER_ICE_DENSITY)
         else:
             water_saturation.append(float(
                 PropsSI("P", "T", value, "Q", 0, "Water")
@@ -550,6 +613,8 @@ class ConservedGaussianJet:
         radiative_absorptivity: float = 0.0,
         energy_transport: str = "total",
         hydrogen_nonideal_volume_correction: bool = False,
+        hydrogen_nonideal_volume_strict: bool = False,
+        water_ice_property_model: str = "murphy_koop_2005",
     ):
         if min(
             source.diameter, source.velocity, source.density,
@@ -617,6 +682,24 @@ class ConservedGaussianJet:
         self.hydrogen_nonideal_volume_correction = bool(
             hydrogen_nonideal_volume_correction
         )
+        self.hydrogen_nonideal_volume_strict = bool(
+            hydrogen_nonideal_volume_strict
+        )
+        if (
+            self.hydrogen_nonideal_volume_strict
+            and not self.hydrogen_nonideal_volume_correction
+        ):
+            raise ValueError(
+                "strict non-ideal-volume screening requires the correction"
+            )
+        if water_ice_property_model not in {
+            "murphy_koop_2005", "legacy_pre_murphy_koop_v1",
+        }:
+            raise ValueError("unknown water-ice property model")
+        self.water_ice_property_model = water_ice_property_model
+        self._air_phase_table = _air_phase_property_table(
+            self.water_ice_property_model
+        )
         mw_dry, dry_fractions = phase_dry_air_composition(self.equilibrium_argon_condensation)
         (self._dry_nitrogen_mass_fraction, self._dry_oxygen_mass_fraction,
          self._dry_argon_mass_fraction) = dry_fractions
@@ -639,7 +722,7 @@ class ConservedGaussianJet:
                 self.ambient_pressure * self._humid_ambient_molecular_weight
                 / (R_UNIVERSAL * self.ambient_temperature)
             )
-            phase_table = _air_phase_property_table()
+            phase_table = self._air_phase_table
             dry_mass = 1.0 / (1.0 + self.ambient_absolute_humidity)
             for species, mass, mw in zip(
                 ("nitrogen", "oxygen", "argon", "water"),
@@ -814,7 +897,7 @@ class ConservedGaussianJet:
         if self.equilibrium_air_condensation:
             # Build once per process; subsequent sources share the immutable
             # component-property grid.
-            _air_phase_property_table()
+            self._air_phase_table
             key = (
                 self.ambient_temperature, self.ambient_pressure,
                 self.ambient_density, self.fuel_molecular_weight,
@@ -956,7 +1039,17 @@ class ConservedGaussianJet:
                     float(value), float(pressure),
                     self.hydrogen_enthalpy_species,
                 )
-            except (ValueError, RuntimeError):
+            except (ValueError, RuntimeError) as error:
+                if self.hydrogen_nonideal_volume_strict:
+                    raise ValueError(
+                        "pure-H2 non-ideal-volume screening is outside its "
+                        f"stable-gas domain at T={value:g} K and "
+                        f"p_H2={pressure:g} Pa; this is not a mixture EOS"
+                    ) from error
+                # The non-strict option is a deliberately partial pure-H2
+                # screen, not a mixture EOS. Retain the ideal local closure
+                # outside the stable pure-gas comparison domain; callers who
+                # need complete coverage must request the strict guard.
                 continue
             if result.compressibility > 0.0:
                 compressibility[index] = result.compressibility
@@ -1389,7 +1482,7 @@ class ConservedGaussianJet:
         self, density: np.ndarray, fuel_fraction: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray]:
         """Solve equilibrium N2/O2/Ar/H2O temperature and enthalpy."""
-        table = _air_phase_property_table()
+        table = self._air_phase_table
         grid = table["temperature"]
         mw_h, mw_n, mw_o, mw_ar = (
             self.fuel_molecular_weight, 0.0280134, 0.0319988, 0.039948

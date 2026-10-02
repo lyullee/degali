@@ -37,6 +37,9 @@ class YawedCrosswind:
 
     Ambient width growth uses horizontal travelled distance, not global X.
     No reverse axial ambient branch, resolved TKE or mixed-solid EOS is added.
+    ``wind_angle`` is a horizontal *to* bearing in radians, counter-clockwise
+    from global ``+x``.  The same global coordinate convention is used by
+    :class:`YawedTrajectory` and the optional site-geometry screen.
     """
 
     def __init__(self, base, wind_angle):
@@ -150,14 +153,25 @@ class YawedCrosswind:
     def path_rate(state):
         return np.r_[math.cos(state[PITCH]), direction(state[PITCH], state[YAW])]
 
-    def solve(self, initial, *, distance, step=.02, checkpoint=None):
-        """Conservative RK4 with strict flux inversion at every stage."""
+    def solve(self, initial, *, distance, step=.02, checkpoint=None,
+              maximum_material_time_s=None):
+        """Conservative RK4 with strict flux inversion at every stage.
+
+        ``maximum_material_time_s`` is an optional finite-source clock.  The
+        march stops at the first section bracketing that material time, leaving
+        :func:`finite_release_puff_handoff` to interpolate the exact switch.
+        """
         self.view(initial)
         if not all(math.isfinite(v) and v > 0 for v in (distance,step)):
             raise ValueError('positive finite distance and step required')
+        if maximum_material_time_s is not None and (
+                not math.isfinite(maximum_material_time_s)
+                or maximum_material_time_s <= 0):
+            raise ValueError('maximum material time must be finite and positive')
         count = math.ceil(distance/step)
         arc = np.linspace(0.,distance,count+1)
         states, fluxes, sources, cumulative = [np.array(initial)], [], [], [np.zeros(6)]
+        material_time = [0.0]
         fluxes.append(self.fluxes(initial))
         sources.append(self.sources(initial))
 
@@ -172,6 +186,7 @@ class YawedCrosswind:
             scale = np.maximum.reduce([abs(actual),abs(total),np.ones_like(actual)])
             return dict(arc_length=arc[:len(states)],states=np.asarray(states),fluxes=actual,
                         sources=np.asarray(sources),cumulative_sources=total,
+                        material_time_s=np.asarray(material_time),
                         maximum_relative_balance_residual=float(np.max(abs(actual-actual[0]-total)/scale)))
 
         try:
@@ -192,8 +207,18 @@ class YawedCrosswind:
                 fluxes.append(self.fluxes(new))
                 sources.append(self.sources(new))
                 cumulative.append(cumulative[-1]+df)
+                old_speed = np.linalg.norm(f[2:5])/f[0]
+                new_speed = np.linalg.norm(fluxes[-1][2:5])/fluxes[-1][0]
+                if old_speed <= 0 or new_speed <= 0:
+                    raise RuntimeError('non-positive material speed')
+                material_time.append(
+                    material_time[-1]+h/2*(1/old_speed+1/new_speed)
+                )
                 if checkpoint is not None and ((i+1)%10 == 0 or i+1 == count):
                     checkpoint(i+1,result(),None)
+                if (maximum_material_time_s is not None
+                        and material_time[-1] >= maximum_material_time_s):
+                    break
         except Exception as error:
             if checkpoint is not None:
                 checkpoint(len(states)-1,result(),repr(error))
@@ -238,3 +263,13 @@ class YawedTrajectory:
         """Return mole fraction (0--1), not volume percent."""
         state,lateral = self.section(x,y)
         return self.model.base.point_mole_fraction(self.model.proxy(state),lateral,z)
+
+    def obstacle_screen(self, obstacles):
+        """Return a strict geometry applicability screen for solid obstacles.
+
+        This convenience wrapper passes the computed global centre trajectory
+        to :func:`degali.addons.site_geometry.screen_trajectory`.  It never
+        changes this trajectory or manufactures an obstacle-wake field.
+        """
+        from .site_geometry import screen_trajectory
+        return screen_trajectory(self.states[:, [X, Y, Z]], obstacles)

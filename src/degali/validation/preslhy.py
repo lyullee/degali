@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import datetime, time
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -459,6 +460,83 @@ def _column(rows, index) -> np.ndarray:
     return out
 
 
+def _clock_seconds(values) -> np.ndarray:
+    """Convert E3.5 clock values to a monotone seconds-of-record axis.
+
+    The public workbooks store the 1 Hz Flowmeter clock and 3 Hz Xensor clock
+    as strings with different decimal precision.  Their shared wall-clock is
+    a stronger synchronisation key than an assumed ratio of record lengths.
+    A record crossing midnight is unwrapped; non-clock fixture values return
+    NaNs so older structurally incomplete workbooks retain the safe fallback.
+    """
+
+    parsed = []
+    for value in values:
+        if isinstance(value, datetime):
+            value = value.time()
+        if isinstance(value, time):
+            seconds = (
+                value.hour * 3600.0 + value.minute * 60.0
+                + value.second + value.microsecond * 1.0e-6
+            )
+        elif isinstance(value, str):
+            match = re.fullmatch(r"\s*(\d{1,2}):(\d{2}):(\d{2}(?:\.\d+)?)\s*", value)
+            if match is None:
+                seconds = float("nan")
+            else:
+                hour, minute, second = match.groups()
+                seconds = 3600.0 * float(hour) + 60.0 * float(minute) + float(second)
+        else:
+            seconds = float("nan")
+        parsed.append(seconds)
+    out = np.asarray(parsed, dtype=float)
+    if not np.all(np.isfinite(out)):
+        return out
+    for index in range(1, len(out)):
+        if out[index] < out[index - 1]:
+            out[index:] += 86400.0
+    return out
+
+
+def synchronized_gas_window(
+    flow_clock_s,
+    gas_clock_s,
+    flow_window: tuple[int, int],
+    *,
+    gas_transport_delay_s: float = 0.0,
+) -> tuple[int, int] | None:
+    """Map a half-open flow window to Xensor samples by recorded clock time.
+
+    ``gas_transport_delay_s`` shifts the observation window later than its
+    source-flow window.  It must be a declared measurement-line correction;
+    zero is the only default and this function never estimates a favourable
+    lag from concentration data.  ``None`` is returned if either clock is
+    unavailable, allowing the existing record-fraction fallback for old or
+    reduced workbooks.
+    """
+
+    if gas_transport_delay_s < 0.0:
+        raise ValueError("gas_transport_delay_s cannot be negative")
+    first, last = map(int, flow_window)
+    flow_clock_s = np.asarray(flow_clock_s, dtype=float)
+    gas_clock_s = np.asarray(gas_clock_s, dtype=float)
+    if first < 0 or last <= first or last > len(flow_clock_s):
+        raise ValueError("flow_window is outside the flow clock")
+    if not (np.all(np.isfinite(flow_clock_s)) and np.all(np.isfinite(gas_clock_s))):
+        return None
+    start = flow_clock_s[first] + gas_transport_delay_s
+    if last < len(flow_clock_s):
+        end = flow_clock_s[last] + gas_transport_delay_s
+    else:
+        increments = np.diff(flow_clock_s)
+        step = float(np.median(increments[increments > 0.0])) if np.any(increments > 0.0) else 1.0
+        end = flow_clock_s[last - 1] + step + gas_transport_delay_s
+    selected = np.flatnonzero((gas_clock_s >= start) & (gas_clock_s < end))
+    if selected.size == 0:
+        return None
+    return int(selected[0]), int(selected[-1] + 1)
+
+
 def read_trial(
     path: str | Path,
     positions: dict,
@@ -466,6 +544,7 @@ def read_trial(
     threshold: float = 0.5,
     floor: float = 0.05,
     release_height: float = 0.5,
+    gas_transport_delay_s: float = 18.0,
 ) -> Trial:
     """Reduce one workbook.
 
@@ -494,6 +573,12 @@ def read_trial(
         ``exp(-(1.0/0.15)**2)`` and the prediction is ten to the minus
         nineteen. That is what an earlier version of this work reported as the
         model failing catastrophically on those ten trials.
+    gas_transport_delay_s
+        Declared Xensor sampling-line delay in seconds.  The E3.5 technical
+        report documents approximately 18 s for its 30 m, 1/8-inch pumped
+        sampling lines, hence the default.  It is applied only when both
+        workbook clocks parse and is never inferred from H2 peaks.  Set it to
+        zero only when analysing a deliberately unshifted measurement record.
     """
     import openpyxl
 
@@ -535,12 +620,20 @@ def read_trial(
         for i, h in enumerate(gas_header)
         if h and _SERIAL.search(str(h))
     }
-    # the two sheets run at different rates; map the flow window onto the gas
-    # record by fraction of the record rather than by clock, because the
-    # timestamps are strings of differing precision
+    # The two sheets run at different rates.  Prefer their recorded clocks:
+    # strings differ in decimal precision but share a wall-clock.  Retain the
+    # former fraction fallback only for reduced/structurally unusual files.
     n = len(gas_rows) - 1
-    lo = int(round(first / len(flow) * n))
-    hi = max(int(round(last / len(flow) * n)), lo + 1)
+    aligned = synchronized_gas_window(
+        _clock_seconds([row[0] if row else None for row in flow_rows[1:]]),
+        _clock_seconds([row[0] if row else None for row in gas_rows[1:]]),
+        (first, last), gas_transport_delay_s=gas_transport_delay_s,
+    )
+    if aligned is None:
+        lo = int(round(first / len(flow) * n))
+        hi = max(int(round(last / len(flow) * n)), lo + 1)
+    else:
+        lo, hi = aligned
 
     readings = []
     for serial, column in columns.items():

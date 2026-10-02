@@ -41,9 +41,22 @@ grant 779613). D3.6 supplies the E3.5 conditions, the sensor table and the
 instrument ranges; D3.2 the integral-model comparisons and the 72 K validity
 limit on the adiabatic mixing method.
 
+**Lyons, K., Coldrick, S. and Atkinson, G. (2023).** *Fuel Cells and Hydrogen
+Joint Undertaking (FCH JU); Summary of experiment series E3.5*, Karlsruhe
+Institute of Technology, DOI 10.35097/1481.  The public archive catalogue was
+read directly for its instrument inventory and archive description.  It lists
+the H2/O2/thermal/pressure/mass-flow/weather/video channels and reports
+condensed air near the release, but contains no listed particle-resolved or
+separate gas/particle-velocity channel:
+<https://doi.org/10.35097/1481>.
+
 **Norwegian Defence Research Establishment (2021).** *Large scale leakage of
 liquid hydrogen (LH2) — tests related to bunkering and maritime use.* FFI
-Report 21/03101.
+Report 20/03101. Pages 15--17 were visually checked: seven outdoor tests use
+pad/field thermocouples, oxygen-depletion gas measurements, and 5/10 m mast
+weather readings; page 17 identifies the 30/50/100 m, 0.1/1.0/1.8 m field
+array. No particle-size, phase-inventory or gas/particle-velocity instrument
+is described. The local source PDF is not redistributed.
 
 ## Primary-source correction
 
@@ -130,6 +143,40 @@ directly. Equations 13--24 and Fig. 4 are reproduced in
 `addons.cryogenic_air`; the phase-domain and energy-balance audit is in
 `docs/li2026-air-condensation-audit.md`.
 
+**Barrett, C.S., Meyer, L., Greer, S.C. and Wasserman, J. (1968); Erratum
+(1972).** "Nitrogen--Oxygen Phase Diagram," *Journal of Chemical Physics*
+**48**(6), 2670--2673, doi:10.1063/1.1669500; erratum **56**, 681,
+doi:10.1063/1.1676933.  The author-hosted public copy was checked on
+2026-09-15 and contains the erratum, not a usable original phase-diagram
+table. It records a Gibbs-phase-rule correction at 43 K and explicitly says
+the corrected region had no experimental data. Search metadata describes the
+original X-ray observations only over 21--50 K. This source therefore
+supports a low-temperature mixed-solid warning, but does not supply the
+59--63 K mixture thermodynamic closure; see
+`cold-mixed-phase-evidence.md`.
+
+**Kochenburger, T.M., Grohmann, S. and Oelrich, L.R. (2015).** "Evaluation
+of a two-stage mixed refrigerant cascade for HTS cooling below 60 K."
+*Physics Procedia* **67**, 227--232, doi:10.1016/j.phpro.2015.06.039.
+The open article's Fig. 1 renders experimental N2--O2 liquidus and solidus
+points over roughly 48--64 K, explicitly attributing the phase diagram to
+Barrett et al. and the experimental points to Ruhemann et al. It is an
+independent public check that oxygen depresses nitrogen freezing and that the
+59--63 K local states can lie in a mixed-phase boundary region. It does **not**
+provide a tabulated, pressure-qualified mixture Gibbs/enthalpy closure, so it
+is used only to state the applicability boundary and not to create numerical
+DEGALI coefficients; see `cold-mixed-phase-evidence.md`.
+
+**Ruhemann, M. (1936).** "Equilibrium Curves of Low-Melting Mixtures,"
+*Physikalische Zeitschrift der Sowjetunion* **16**, 67--82 (special issue,
+June). The accessible NBS low-temperature oxygen bibliography identifies this
+as experimental two-phase-equilibrium and specific-heat work on O2--N2 over
+50--80 K, with graphs and apparatus. Its numerical paper is not publicly
+available in the sources checked, so the bibliographic description is not
+converted into a Cp, enthalpy, phase-fraction, or mixture-EOS coefficient.
+It is the precisely identified primary-source target for the 59--63 K
+mixed-phase energy closure; see `cold-mixed-phase-evidence.md`.
+
 **Zhang, J.X., Ba, Q.X., Xiao, J.S., Christopher, D.M., Liu, Y., Yao, C.Y. and
 Li, X.F. (2023).** "Analytical model of cryogenic hydrogen releases." ICHS
 conference paper 189. Read directly from the public HySafe PDF:
@@ -149,6 +196,16 @@ momentum and energy balances for the optional initial entrainment/heating
 plug-flow zone and records that its 0 K default leaves it disabled in the GUI:
 <https://www.osti.gov/servlets/purl/2563814>.  The official PDF is retained in
 `reference/lh2/` with a checksum.
+
+**Sandia National Laboratories (2023).** *Technical Justifications for Liquid
+Hydrogen Exposure Distances*, SAND2023-12548.  Read directly, especially
+section 3.  It documents the HEM/MLM source-flow comparison and its limited
+DNV/PRESLHY concentration comparisons.  Crucially, it states that its
+dispersion and flame models are gas-only after the orifice and neglect air or
+humidity condensation.  It is therefore a useful independently published
+scope boundary, not evidence that a gas-only calculation and DEGALI's optional
+condensed-air branches have been compared under identical assumptions:
+<https://energy.sandia.gov/download/80280/>.
 
 **Sandia National Laboratories, HyRAM jet model.** The current `_dev_plug`
 implementation was read directly at commit
@@ -171,6 +228,76 @@ official OSTI manuscript: <https://www.sandia.gov/research/publications/details/
 <https://www.osti.gov/servlets/purl/1529288>. The aggregate figure legends
 also contain an untabulated 4 bar/45 K series, so the nine-condition model
 comparison is marked provisional pending fit provenance.
+
+**Hecht, E.S. and co-workers (2023).** "Concentration fluctuations and
+flammability of cryo-compressed hydrogen and methane jets." *Fuel* **358**,
+130230. doi:10.1016/j.fuel.2023.130230. The OSTI accepted manuscript was read
+directly. Its 1.25 mm, 3 bar, 51 K hydrogen case provides concentration RMS,
+intermittency and radial PDF-shape evidence, not velocity TKE or epsilon:
+<https://www.osti.gov/biblio/2311268>.
+
+**Mohammadpour, J. and co-workers (2024).** "An efficient dimensionality
+reduction approach for modelling cryogenic hydrogen release."
+*International Journal of Hydrogen Energy* **91**, 649--658.
+doi:10.1016/j.ijhydene.2024.10.182. The open institutional manuscript was
+read directly. Its Figure 3 mean and axial-RMS velocity contours for a
+5 bar, 50 K, 1 mm LES are used only for a positive-semidefinite TKE screening
+envelope, because the paper explicitly notes that the compared Sandia report
+did not publish velocity distributions:
+<https://research-management.mq.edu.au/ws/portalfiles/portal/399409510/394825139.pdf>.
+
+**Hecht, E.S. and Panda, P.P. (2018).** *Experimental validation of a model
+for cryogenic hydrogen jet dispersion*, SAND2018-2834C. The public Sandia
+presentation was read directly through OSTI record 1503433. It confirms
+simultaneous Raman imaging and condensed-moisture-particle PIV, plus displayed
+mean-velocity panels, but provides no downloadable velocity-RMS, Reynolds
+stress, epsilon, integral-scale or tracer-response data. It is therefore
+evidence of the measurement capability and a provenance caution, not a TKE
+calibration source: <https://www.osti.gov/biblio/1503433>.
+
+**Saini, D. and co-workers (2024).** "Effect of storage conditions on the
+characteristics of cryogenic hydrogen jet dispersion." *International Journal
+of Hydrogen Energy* **67**, 1--15. doi:10.1016/j.ijhydene.2024.04.040. This
+open cryogenic 3--7 bar, 50--70 K RANS study documents a conventional
+`k-epsilon` comparison formulation (`C_mu=.09`, `sigma_k=1`), but does not
+provide a matched experimental epsilon or integral-length-scale profile. It
+is therefore evidence for transparent notation only, not a DEGALI TKE closure:
+<https://doi.org/10.1016/j.ijhydene.2024.04.040>.
+
+**Schiller--Naumann finite-Re isolated-sphere drag relation.** Its
+`24/Re_p * (1 + 0.15 Re_p**0.687)` form and the conventional `Re_p <= 1000`
+range were checked against the open *Journal of Fluid Mechanics* discussion
+of finite-Re point-particle drag:
+<https://www.cambridge.org/core/journals/journal-of-fluid-mechanics/article/new-paradigm-for-computing-hydrodynamic-forces-on-particles-in-eulerlagrange-pointparticle-simulations/C653BA1C01108A86F99CF0F921931B44>.
+DEGALI uses only the local response-time form behind an explicit opt-in
+helper; it does not use this incompressible isolated-sphere relation as an
+LH2 particle-size or drag-law selection.
+
+**Davies, C.N. (1945), Cunningham slip correction.** The conventional
+`C_c = 1 + Kn[1.257 + 0.400 exp(-1.10/Kn)]` form and the diameter convention
+`Kn=2 lambda/d` were checked against the U.S. EPA's reproduction of Davies'
+equation and definition:
+<https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=9101ZF9P.TXT>. It is exposed
+only as a declared-input low-Re rarefaction screen, not as a cryogenic-mixture
+mean-free-path or combined finite-Re drag closure.
+
+**Mohammadpour, J., Ba, Q., Li, X. and Salehi, F. (2026).** "Innovative
+approaches for predicting cryogenic hydrogen behaviour." *International
+Journal of Heat and Fluid Flow* **117**, 110025.
+doi:10.1016/j.ijheatfluidflow.2025.110025. This open article uses 540 LES
+snapshots of the Sandia 5 bar/50 K jet for a POD--BiLSTM reconstruction, but
+states that the numerical data are available on request. Its snapshot results
+are not treated as public experimental RMS data or an LH2 calibration target:
+<https://doi.org/10.1016/j.ijheatfluidflow.2025.110025>.
+
+**Li, X., Zhang, J., Wang, Y., Christopher, D. M. and Yin, Q. (2026).**
+"Modeling of cryogenic hydrogen jets with air condensation." *International
+Journal of Hydrogen Energy* **250**, 156128.
+doi:10.1016/j.ijhydene.2026.156128. Its initial entrainment/heating zone
+adds equilibrium nitrogen-condensation latent heat and a stationary-condensate
+momentum term. DEGALI independently implements this as an opt-in limiting
+comparison, retaining its plug-flow, nitrogen-only and equilibrium limits:
+<https://doi.org/10.1016/j.ijhydene.2026.156128>.
 
 **Sun, R., Pu, L., He, Y., Wang, T. and Tan, H. (2024).** "Phase change
 modeling of air at the liquid hydrogen release." *International Journal of
@@ -196,6 +323,21 @@ approximately 0.689 bar triple pressure. The implemented sub-triple branch is
 a declared constant-latent Clausius--Clapeyron continuation, not a hidden
 CoolProp extrapolation:
 <https://webbook.nist.gov/cgi/cbook.cgi?ID=C7440371&Mask=24>.
+
+**Murphy, D.M. and Koop, T. (2005).** "Review of the vapour pressures of ice
+and supercooled water for atmospheric applications." *Quarterly Journal of
+the Royal Meteorological Society* **131**, 1539--1565.
+doi:10.1256/qj.04.94. Equation 7 supplies the stable H2O ice--vapour pressure
+used above 110 K by the optional humid equilibrium-phase table. Below 110 K
+the code labels its boundary-anchored constant-latent continuation as an
+extrapolation rather than experimental frost kinetics:
+<https://doi.org/10.1256/qj.04.94>.
+
+**IAPWS R10-06 (2009).** *Revised Release on the Equation of State 2006 for
+Ice Ih.* Table 6 gives 916.7094922 kg/m3 at the water triple point; that
+value is the constant solid-H2O volume bound used by the humid equilibrium
+option, rather than liquid-water density:
+<https://www.iapws.org/relguide/Ice-Rev2009.pdf>.
 
 **Luna, A.J. and co-workers (2018).** "Measurements of Enthalpy of
 Sublimation of Ne, N2, O2, Ar, CO2, Kr, Xe, and H2O Using a Double Paddle
@@ -238,6 +380,36 @@ archive sensor sheet conflict on horizontal nozzle elevation (200 versus
 <https://cordis.europa.eu/project/id/101101381/results>,
 <https://doi.org/10.18710/JXJP0H>.
 
+**Jordan, T., Friedrich, A., Veser, A. and Kotchourko, N. (2019).**
+*PRESLHY Experiment series E3.1 (Cryogenic Hydrogen Blow-down/Discharge)
+results -- part A "high pressure"*. KITopen doi:10.5445/IR/1000096833;
+RADAR4KIT archive doi:10.35097/1187, CC BY 4.0. The public archive contains
+80 K/300 K high-pressure result files for 0.5/1/2/4 mm nozzles and a D=4 mm,
+80 K camera/BOS image set. Its own description says the visible particles may
+be nozzle ice or condensed hydrogen, so it supplies no N2/O2 particle-size,
+phase-inventory, or gas-particle-slip closure. The local raw archive is ignored
+and not redistributed; its intake/scope audit is
+`public-preslhy-e31-intake.md`.
+
+**Cirrone, D., Makarov, D., Kashkarov, S., Friedrich, A. and Molkov, V.
+(2023).** "Physical model of non-adiabatic blowdown of cryo-compressed
+hydrogen storage tanks." *International Journal of Hydrogen Energy*, 48(90),
+35387--35406. doi:10.1016/j.ijhydene.2023.05.182. The open published version
+uses the real-gas NIST/CoolProp properties, tank and discharge-pipe thermal
+models, and an under-expanded nozzle construction; it reports validation
+against sixteen PRESLHY tests (80--310 K, 0.6--20 MPa, 0.5--4 mm) with
+test-specific Cd in 0.6--0.8. DEGALI's opt-in implementation is deliberately
+smaller and documents its unresolved wall/withdrawal closures in
+`cryocompressed-blowdown-status.md`.
+
+**Cirrone, D., Makarov, D. V., Kuznetsov, M., Friedrich, A. and Molkov, V.
+(2022).** "Effect of heat transfer through the release pipe on simulations of
+cryogenic hydrogen jet fires and hazard distances." *International Journal of
+Hydrogen Energy*, 47(50), 21596--21611. doi:10.1016/j.ijhydene.2022.04.276.
+The open conference version reports geometry-dependent pipe warming and is
+used only to justify a declared pipe-thermal sensitivity, never a universal
+source-temperature correction.
+
 **Shangguan, S., Wang, L., Shi, R., Li, Z., Xu, Z., Tan, H., Li, Y. and Lei,
 G. (2025).** "Experimental investigation on
 solidification characteristics of air-like nitrogen-oxygen mixtures in liquid
@@ -246,6 +418,16 @@ doi:10.1016/j.cryogenics.2025.104237. The reported approximately 0.5--1.2 mm
 particles were formed by injecting gas into bulk LH2. They do not provide a
 nucleation-size closure for a freely expanding cryogenic jet and therefore do
 not justify replacing the existing 1/10/100 um airborne-particle sensitivity.
+
+**Steele, R.L. (1968).** *The thermodynamic properties of nitrogen-oxygen
+mixtures*, MIT M.S./Naval Engineer thesis. A public 192-page archive copy was
+read on 2026-09-17. It constructs N2/O2 liquid--vapour equilibrium
+enthalpy/composition diagrams at 1, 5, 10 and 20 atm, but its atmospheric
+coverage starts at 77.36 K. It is therefore provenance for rejecting a
+pure-component enthalpy average and **not** a 59--63 K solid/liquid-mixture
+closure. Local copy and any extracted numerical material remain ignored under
+`reference/`; no external data are distributed:
+<https://archive.org/download/thermodynamicpro00stee/thermodynamicpro00stee.pdf>.
 
 **Hanna, S.R., Chang, J.C. and Strimaitis, D.G.** The acceptance criteria used
 throughout — MG between 0.7 and 1.3, VG below 1.6, FAC2 above 0.5 — are theirs

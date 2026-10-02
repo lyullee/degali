@@ -1,7 +1,41 @@
 import numpy as np
 import pytest
 from degali.addons.normal_stress_budget import (normal_work_interval,
-    minimum_tke_for_normal_work_cap, covariance_completion, axial_normal_fluxes)
+    minimum_tke_for_normal_work_cap, minimum_tke_from_axial_rms,
+    minimum_tke_from_two_normal_rms,
+    covariance_completion, axial_normal_fluxes)
+
+
+def test_axial_rms_gives_sharp_psd_tke_lower_bound_without_isotropy():
+    rms = np.array([2., 2., 0.])
+    shear = np.array([[0., 0.], [3., 4.], [0., 0.]])
+    out = minimum_tke_from_axial_rms(shear, rms)
+    np.testing.assert_allclose(out['axial_variance'], [4., 4., 0.])
+    np.testing.assert_allclose(out['minimum_tke'], [2., 5.125, 0.])
+    assert not out['uses_isotropy'] and not out['physical_closure']
+
+    completed = covariance_completion(
+        shear, out['minimum_tke'], out['axial_variance']
+    )['covariance']
+    assert np.min(np.linalg.eigvalsh(completed)) >= -1e-14
+
+
+def test_axial_rms_constraint_rejects_impossible_or_bad_inputs():
+    with pytest.raises(ValueError, match='zero axial RMS'):
+        minimum_tke_from_axial_rms(np.array([[1., 0.]]), np.array([0.]))
+    with pytest.raises(ValueError, match='nonnegative axial RMS'):
+        minimum_tke_from_axial_rms(np.zeros((1, 2)), np.array([-1.]))
+    with pytest.raises(ValueError, match='matching'):
+        minimum_tke_from_axial_rms(np.zeros((2, 2)), np.array([1.]))
+
+
+def test_two_observed_normal_rms_supply_a_stronger_trace_lower_bound():
+    out = minimum_tke_from_two_normal_rms(np.array([3., 4.]), np.array([4., 0.]))
+    np.testing.assert_allclose(out['minimum_tke'], [12.5, 8.])
+    np.testing.assert_allclose(out['unmeasured_normal_variance_lower_bound'], [0., 0.])
+    assert not out['uses_isotropy']
+    with pytest.raises(ValueError, match='matching'):
+        minimum_tke_from_two_normal_rms([1.], [1., 2.])
 
 
 def test_sharp_normal_interval_and_large_budget_stability():

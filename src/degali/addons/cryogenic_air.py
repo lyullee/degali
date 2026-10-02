@@ -24,6 +24,8 @@ from functools import lru_cache
 
 from scipy.optimize import brentq
 
+from .transport_evidence import PARTICLE_SLIP_BOUNDARY
+
 
 # Stable solid-vapour data, stored as (K, Pa).  N2 is Table 7-11 of NBS
 # Circular 564.  O2 is Aoyama and Kanda's solid data as transcribed in Georgia
@@ -141,6 +143,102 @@ class AirPhaseEquilibrium:
 
 
 @dataclass(frozen=True)
+class N2O2CondensedPhaseScope:
+    """Applicability of a separate-pure-component N2/O2 phase split.
+
+    This is a scope result, not a replacement N2/O2 mixture EOS.  In
+    particular, two simultaneously condensed components cannot be treated as
+    independent pure phases merely because their individual vapour pressures
+    are available.  The condensed composition reported here is only an
+    inventory diagnostic; it is not a liquidus, solidus, or phase fraction.
+    """
+
+    temperature: float
+    classification: str
+    nitrogen_condensed: bool
+    oxygen_condensed: bool
+    condensed_nitrogen_mole_fraction: float | None
+    mixture_thermodynamics_required: bool
+    separate_pure_component_closure_usable: bool
+    reason: str
+
+
+def n2o2_condensed_phase_scope(
+    split: AirPhaseEquilibrium,
+) -> N2O2CondensedPhaseScope:
+    """Classify the physical scope of a separate N2/O2 equilibrium split.
+
+    The current equilibrium helper is exact only for its declared component
+    partial-pressure bookkeeping.  It has no condensed-solution chemical
+    potential, liquid composition, mixed-solid Gibbs energy, or mixture
+    caloric model.  It is therefore physically self-contained only while no
+    bulk N2 or O2 has condensed.  A one-component condensate is retained as a
+    transparent limiting bound; co-condensation requires a mixture closure.
+    """
+    scale = max(
+        split.nitrogen_total_flow, split.oxygen_total_flow,
+        split.hydrogen_flow, 1.0,
+    )
+    tolerance = 1.0e-12 * scale
+    n2 = split.nitrogen_condensed_flow > tolerance
+    o2 = split.oxygen_condensed_flow > tolerance
+    if not n2 and not o2:
+        return N2O2CondensedPhaseScope(
+            temperature=split.temperature,
+            classification="uncondensed_bulk_air",
+            nitrogen_condensed=False,
+            oxygen_condensed=False,
+            condensed_nitrogen_mole_fraction=None,
+            mixture_thermodynamics_required=False,
+            separate_pure_component_closure_usable=True,
+            reason="no bulk N2 or O2 condensate is present",
+        )
+
+    if n2 and o2:
+        n_n2 = split.nitrogen_condensed_flow / _MOLECULAR_WEIGHT["Nitrogen"]
+        n_o2 = split.oxygen_condensed_flow / _MOLECULAR_WEIGHT["Oxygen"]
+        x_n2 = n_n2 / (n_n2 + n_o2)
+        if split.temperature < _TRIPLE_TEMPERATURE["Nitrogen"]:
+            classification = "co_condensed_subtriple_n2o2_mixture_unsupported"
+            reason = (
+                "co-condensed N2/O2 is below the N2 triple point; mixed "
+                "solid/liquid stability and calorics are not closed"
+            )
+        else:
+            classification = "co_condensed_n2o2_mixture_unsupported"
+            reason = (
+                "co-condensed N2/O2 requires a common liquid/solid mixture "
+                "chemical-potential and caloric closure"
+            )
+        return N2O2CondensedPhaseScope(
+            temperature=split.temperature,
+            classification=classification,
+            nitrogen_condensed=True,
+            oxygen_condensed=True,
+            condensed_nitrogen_mole_fraction=x_n2,
+            mixture_thermodynamics_required=True,
+            separate_pure_component_closure_usable=False,
+            reason=reason,
+        )
+
+    species = "N2" if n2 else "O2"
+    return N2O2CondensedPhaseScope(
+        temperature=split.temperature,
+        classification="single_component_condensate_bound",
+        nitrogen_condensed=n2,
+        oxygen_condensed=o2,
+        condensed_nitrogen_mole_fraction=None,
+        mixture_thermodynamics_required=True,
+        separate_pure_component_closure_usable=False,
+        reason=(
+            f"only {species} is condensed by the pure-component split; "
+            "missing dissolved-component chemical potentials make this a "
+            "limiting bound, not a complete N2/O2 mixture closure"
+        ),
+    )
+
+
+@dataclass(frozen=True)
 class HydrogenEvaporationEndpoint:
     """First state with no liquid H2, allowing solid N2 and O2."""
 
@@ -155,6 +253,7 @@ class HydrogenEvaporationEndpoint:
     hydrogen_partial_pressure: float
     nitrogen_partial_pressure: float
     oxygen_partial_pressure: float
+    n2o2_phase_scope: N2O2CondensedPhaseScope
     specific_momentum: float
     particle_velocity_fraction: float
     specific_kinetic_energy: float
@@ -181,6 +280,67 @@ class MultiphaseHydrogenSourcePlane:
     density: float
     diameter: float
     formation_distance: float
+
+
+@dataclass(frozen=True)
+class TwoVelocityRelaxation:
+    """Exact finite-mass two-velocity drag substep.
+
+    ``gas_velocity`` and ``particle_velocity`` are the values after an
+    explicitly supplied constant relaxation time.  The calculation conserves
+    axial momentum exactly.  The decrease in resolved relative kinetic energy
+    is reported as ``thermalised_kinetic_energy``; a caller that closes a
+    total-energy balance must put that amount into its thermal ledger exactly
+    once.
+
+    This is a kinematic building block, not a particle-size closure.  It is
+    intentionally not connected to the default LH2 source path because the
+    required particle mass, diameter and initial slip have not been measured
+    for the validation releases.
+    """
+
+    gas_velocity: float
+    particle_velocity: float
+    momentum_before: float
+    momentum_after: float
+    kinetic_energy_before: float
+    kinetic_energy_after: float
+    thermalised_kinetic_energy: float
+    transport_evidence_boundary: str = PARTICLE_SLIP_BOUNDARY.identifier
+    physical_closure_validated: bool = False
+    quantitative_lh2_prediction_allowed: bool = False
+
+
+@dataclass(frozen=True)
+class TwoVelocityPhaseStep:
+    """One entrainment, phase-transfer and drag-conservation control volume.
+
+    The entrained gas has an explicitly supplied axial velocity. Material
+    newly condensed from the mixed gas begins at the pre-transfer gas velocity;
+    material that re-evaporates begins at the particle velocity. These
+    transfer rules prevent phase change from creating or deleting axial
+    momentum before the explicit drag relaxation is applied. If transferred
+    mass joins a phase with a different velocity, its inelastic momentum
+    mixing is recorded as a separate resolved-kinetic-energy loss.
+    """
+
+    gas_mass_flow: float
+    particle_mass_flow: float
+    entrained_gas_mass_flow: float
+    entrained_gas_velocity: float
+    gas_velocity: float
+    particle_velocity: float
+    momentum_before: float
+    momentum_after: float
+    kinetic_energy_before: float
+    kinetic_energy_after: float
+    entrainment_thermalised_kinetic_energy: float
+    phase_transfer_thermalised_kinetic_energy: float
+    drag_thermalised_kinetic_energy: float
+    total_thermalised_kinetic_energy: float
+    transport_evidence_boundary: str = PARTICLE_SLIP_BOUNDARY.identifier
+    physical_closure_validated: bool = False
+    quantitative_lh2_prediction_allowed: bool = False
 
 
 def equilibrium_air_phase_split(
@@ -291,6 +451,7 @@ def multiphase_hydrogen_evaporation_endpoint(
     storage_pressure: float | None = None,
     hydrogen_species: str = "Hydrogen",
     incoming_specific_kinetic_energy: float = 0.0,
+    incoming_total_specific_energy: float | None = None,
 ) -> HydrogenEvaporationEndpoint:
     """Solve the post-flash LH2 endpoint with stable condensed air.
 
@@ -307,6 +468,15 @@ def multiphase_hydrogen_evaporation_endpoint(
     reservoir. A measured moving pipe plane must supply ``u_pipe**2/2``;
     pressure work is already included in enthalpy and is not added again.
 
+    ``incoming_total_specific_energy`` is an alternative, already referenced
+    total source energy (J/kg H2, with the same ambient-gas enthalpy zero used
+    internally).  It is for a measured or independently reconstructed
+    post-flash plane, whose enthalpy and velocity already include pressure
+    expansion work.  If an upstream kinetic component is supplied with this
+    total, it is retained as provenance in the endpoint ledger but is not
+    added a second time.  This keeps a supercritical compressed-gas release
+    from being mislabelled as saturated storage merely to enter the endpoint.
+
     This replaces the impossible 20 K *gaseous-air* endpoint without imposing
     a 68 or 77 K handoff.  The result is a hydrogen gas carrying condensed
     air, which still requires the transported source zone before a
@@ -321,7 +491,10 @@ def multiphase_hydrogen_evaporation_endpoint(
         )
     if min(storage_temperature, ambient_temperature, ambient_pressure) <= 0.0:
         raise ValueError("temperatures and pressure must be positive")
-    if storage_temperature >= float(PropsSI("Tcrit", hydrogen_species)):
+    if (
+        incoming_total_specific_energy is None
+        and storage_temperature >= float(PropsSI("Tcrit", hydrogen_species))
+    ):
         raise ValueError("storage state is not saturated liquid hydrogen")
     if ambient_temperature <= storage_temperature:
         raise ValueError("ambient must be warmer than stored liquid hydrogen")
@@ -332,6 +505,10 @@ def multiphase_hydrogen_evaporation_endpoint(
         or incoming_specific_kinetic_energy < 0.0
     ):
         raise ValueError("incoming specific kinetic energy must be finite and nonnegative")
+    if incoming_total_specific_energy is not None:
+        incoming_total_specific_energy = float(incoming_total_specific_energy)
+        if not math.isfinite(incoming_total_specific_energy):
+            raise ValueError("incoming total specific energy must be finite")
     if not 0.0 <= particle_velocity_fraction <= 1.0:
         raise ValueError("particle velocity fraction must lie from zero to one")
 
@@ -369,25 +546,31 @@ def multiphase_hydrogen_evaporation_endpoint(
     n2_gas = n_total * p_n2 / ambient_pressure * mw_n2
     o2_gas = n_total * p_o2 / ambient_pressure * mw_o2
 
-    if storage_pressure is None:
-        absolute_h_store = PropsSI(
-            "H", "T", storage_temperature, "Q", 0, hydrogen_species
+    if incoming_total_specific_energy is None:
+        if storage_pressure is None:
+            absolute_h_store = PropsSI(
+                "H", "T", storage_temperature, "Q", 0, hydrogen_species
+            )
+        else:
+            if storage_pressure <= 0.0:
+                raise ValueError("storage pressure must be positive")
+            absolute_h_store = PropsSI(
+                "H", "T", storage_temperature, "P", storage_pressure,
+                hydrogen_species,
+            )
+        h_store = float(
+            absolute_h_store
+            - PropsSI(
+                "H", "T|gas", ambient_temperature, "P", ambient_pressure,
+                hydrogen_species,
+            )
         )
+        incoming_energy = h_store + incoming_specific_kinetic_energy
     else:
-        if storage_pressure <= 0.0:
-            raise ValueError("storage pressure must be positive")
-        absolute_h_store = PropsSI(
-            "H", "T", storage_temperature, "P", storage_pressure,
-            hydrogen_species,
-        )
-    h_store = float(
-        absolute_h_store
-        - PropsSI(
-            "H", "T|gas", ambient_temperature, "P", ambient_pressure,
-            hydrogen_species,
-        )
-    )
-    incoming_energy = h_store + incoming_specific_kinetic_energy
+        # The explicit total already contains the kinetic term.  Keep its
+        # separately supplied value for a traceable pipe-to-phase ledger,
+        # without adding it to the balance a second time.
+        incoming_energy = incoming_total_specific_energy
     h_h2 = _relative_gas_enthalpy(
         hydrogen_species, temperature, ambient_temperature, p_h2,
         ambient_pressure,
@@ -471,6 +654,20 @@ def multiphase_hydrogen_evaporation_endpoint(
     specific_kinetic_energy = kinetic_energy(air_ratio)
     outgoing = phase_outgoing + specific_kinetic_energy
     residual = abs(outgoing - incoming_energy) / max(abs(incoming_energy), 1.0)
+    n2o2_scope = n2o2_condensed_phase_scope(AirPhaseEquilibrium(
+        temperature=temperature,
+        pressure=ambient_pressure,
+        hydrogen_flow=1.0,
+        nitrogen_total_flow=n2_total,
+        oxygen_total_flow=o2_total,
+        nitrogen_gas_flow=n2_gas,
+        oxygen_gas_flow=o2_gas,
+        nitrogen_condensed_flow=n2_solid,
+        oxygen_condensed_flow=o2_solid,
+        hydrogen_partial_pressure=p_h2,
+        nitrogen_partial_pressure=p_n2,
+        oxygen_partial_pressure=p_o2,
+    ))
     return HydrogenEvaporationEndpoint(
         hydrogen_species=hydrogen_species,
         temperature=temperature,
@@ -483,6 +680,7 @@ def multiphase_hydrogen_evaporation_endpoint(
         hydrogen_partial_pressure=p_h2,
         nitrogen_partial_pressure=p_n2,
         oxygen_partial_pressure=p_o2,
+        n2o2_phase_scope=n2o2_scope,
         specific_momentum=specific_momentum,
         particle_velocity_fraction=particle_velocity_fraction,
         specific_kinetic_energy=specific_kinetic_energy,
@@ -507,6 +705,7 @@ def multiphase_hydrogen_source_plane(
     storage_pressure: float | None = None,
     hydrogen_species: str = "Hydrogen",
     incoming_specific_kinetic_energy: float = 0.0,
+    incoming_total_specific_energy: float | None = None,
 ) -> MultiphaseHydrogenSourcePlane:
     """Build the first multiphase source plane after liquid H2 evaporates.
 
@@ -547,6 +746,7 @@ def multiphase_hydrogen_source_plane(
         storage_pressure=storage_pressure,
         hydrogen_species=hydrogen_species,
         incoming_specific_kinetic_energy=incoming_specific_kinetic_energy,
+        incoming_total_specific_energy=incoming_total_specific_energy,
     )
     nitrogen_flow = hydrogen_flow * (
         endpoint.nitrogen_gas_ratio + endpoint.nitrogen_solid_ratio
@@ -619,6 +819,478 @@ def particle_relaxation_time(
     if min(diameter, particle_density, gas_viscosity) <= 0.0:
         raise ValueError("diameter, density and viscosity must be positive")
     return particle_density * diameter**2 / (18.0 * gas_viscosity)
+
+
+def particle_knudsen_number(*, mean_free_path: float, diameter: float) -> float:
+    """Return ``Kn=2*lambda/d`` on the particle-diameter convention."""
+    if not all(math.isfinite(value) for value in (mean_free_path, diameter)):
+        raise ValueError("mean free path and diameter must be finite")
+    if mean_free_path <= 0.0 or diameter <= 0.0:
+        raise ValueError("mean free path and diameter must be positive")
+    return 2.0 * mean_free_path / diameter
+
+
+def davies_cunningham_slip_correction(
+    *, mean_free_path: float, diameter: float,
+) -> float:
+    """Return Davies' Cunningham correction for a declared gas mean free path.
+
+    The correction multiplies the *Stokes response time* (and divides the
+    Stokes drag) for a spherical particle when the gas mean free path is not
+    negligible relative to particle diameter.  It uses the Davies constants
+
+    ``C_c = 1 + Kn * (1.257 + 0.4*exp(-1.1/Kn))``,
+
+    with ``Kn=2*lambda/d``.  It is an explicit rarefaction diagnostic, not a
+    prescription for obtaining ``lambda`` in a cryogenic H2/air mixture, and
+    it is intentionally not compounded with the finite-Re
+    Schiller--Naumann helper without a separately declared drag model.
+    """
+    knudsen = particle_knudsen_number(
+        mean_free_path=mean_free_path, diameter=diameter
+    )
+    return 1.0 + knudsen * (
+        1.257 + 0.4 * math.exp(-1.1 / knudsen)
+    )
+
+
+def cunningham_corrected_particle_relaxation_time(
+    *, diameter: float, particle_density: float, gas_viscosity: float,
+    mean_free_path: float,
+) -> float:
+    """Return the low-Re Stokes response time with declared slip correction."""
+    return particle_relaxation_time(
+        diameter=diameter,
+        particle_density=particle_density,
+        gas_viscosity=gas_viscosity,
+    ) * davies_cunningham_slip_correction(
+        mean_free_path=mean_free_path, diameter=diameter
+    )
+
+
+def schiller_naumann_relaxation_time(
+    *, diameter: float, particle_density: float, gas_density: float,
+    gas_viscosity: float, relative_velocity: float,
+) -> float:
+    """Return a local finite-Re relaxation time for an isolated rigid sphere.
+
+    The returned value is the Stokes response time divided by the
+    Schiller--Naumann drag multiplier,
+    ``1 + 0.15 Re_p**0.687``, where
+    ``Re_p = rho_g * d * abs(u_g-u_p) / mu_g``.  The correlation is retained
+    only over its conventional ``Re_p <= 1000`` range.  It is a *local*
+    linearisation: callers using :func:`relax_two_velocity_drag` must
+    re-evaluate it when the slip changes, rather than treating the exact
+    constant-relaxation exponential as a nonlinear-drag trajectory.
+
+    This helper supplies no particle diameter, shape, rarefaction correction,
+    turbulence correction or LH2-specific calibration.  Those remain
+    explicit user inputs/closure choices.
+    """
+    values = {
+        "diameter": diameter,
+        "particle_density": particle_density,
+        "gas_density": gas_density,
+        "gas_viscosity": gas_viscosity,
+        "relative_velocity": relative_velocity,
+    }
+    if not all(math.isfinite(value) for value in values.values()):
+        raise ValueError("finite-Re relaxation inputs must be finite")
+    if min(diameter, particle_density, gas_density, gas_viscosity) <= 0.0:
+        raise ValueError(
+            "diameter, particle density, gas density and viscosity must be positive"
+        )
+    reynolds = gas_density * diameter * abs(relative_velocity) / gas_viscosity
+    if reynolds > 1000.0:
+        raise ValueError(
+            "Schiller--Naumann local relaxation is limited to particle Reynolds "
+            "number <= 1000"
+        )
+    stokes = particle_relaxation_time(
+        diameter=diameter,
+        particle_density=particle_density,
+        gas_viscosity=gas_viscosity,
+    )
+    return stokes / (1.0 + 0.15 * reynolds**0.687)
+
+
+def relax_two_velocity_schiller_naumann_drag(
+    *, gas_mass_flow: float, particle_mass_flow: float,
+    gas_velocity: float, particle_velocity: float, duration: float,
+    diameter: float, particle_density: float, gas_density: float,
+    gas_viscosity: float,
+) -> TwoVelocityRelaxation:
+    """Exactly relax finite-Re isolated-sphere slip at fixed gas properties.
+
+    This is the finite-Re counterpart to :func:`relax_two_velocity_drag`.
+    With ``s = abs(u_g-u_p)``, the Schiller--Naumann drag multiplier gives
+
+    ``ds/dt = -gamma*s*(1 + A*s**0.687)``,
+
+    where ``gamma=(1+m_p/m_g)/tau_stokes`` and
+    ``A=0.15*(rho_g*d/mu_g)**0.687``.  The transformed variable
+    ``s**0.687`` has a closed-form exponential/rational update, so this
+    helper does not freeze a response time at the beginning of the step.
+
+    The isolated-sphere correlation is accepted only when the *initial*
+    particle Reynolds number is at most 1000; slip decreases monotonically,
+    so the entire constant-property step then remains in that range.  It is
+    still not a rarefied, compressible, nonspherical, turbulent or
+    coalescing-particle closure, and it is not wired to the default source.
+    """
+    values = {
+        "gas_mass_flow": gas_mass_flow,
+        "particle_mass_flow": particle_mass_flow,
+        "gas_velocity": gas_velocity,
+        "particle_velocity": particle_velocity,
+        "duration": duration,
+        "diameter": diameter,
+        "particle_density": particle_density,
+        "gas_density": gas_density,
+        "gas_viscosity": gas_viscosity,
+    }
+    if not all(math.isfinite(value) for value in values.values()):
+        raise ValueError("finite-Re two-velocity drag inputs must be finite")
+    if gas_mass_flow <= 0.0:
+        raise ValueError("gas mass flow must be positive")
+    if particle_mass_flow < 0.0:
+        raise ValueError("particle mass flow cannot be negative")
+    if duration < 0.0:
+        raise ValueError("duration must be nonnegative")
+    if min(diameter, particle_density, gas_density, gas_viscosity) <= 0.0:
+        raise ValueError(
+            "diameter, particle density, gas density and viscosity must be positive"
+        )
+
+    momentum_before = (
+        gas_mass_flow * gas_velocity + particle_mass_flow * particle_velocity
+    )
+    kinetic_before = 0.5 * (
+        gas_mass_flow * gas_velocity**2
+        + particle_mass_flow * particle_velocity**2
+    )
+    initial_relative = gas_velocity - particle_velocity
+    reynolds = gas_density * diameter * abs(initial_relative) / gas_viscosity
+    if reynolds > 1000.0:
+        raise ValueError(
+            "Schiller--Naumann two-velocity drag is limited to particle Reynolds "
+            "number <= 1000"
+        )
+    if particle_mass_flow == 0.0 or duration == 0.0 or initial_relative == 0.0:
+        return TwoVelocityRelaxation(
+            gas_velocity=gas_velocity,
+            particle_velocity=particle_velocity,
+            momentum_before=momentum_before,
+            momentum_after=momentum_before,
+            kinetic_energy_before=kinetic_before,
+            kinetic_energy_after=kinetic_before,
+            thermalised_kinetic_energy=0.0,
+        )
+
+    stokes_time = particle_relaxation_time(
+        diameter=diameter,
+        particle_density=particle_density,
+        gas_viscosity=gas_viscosity,
+    )
+    exponent = 0.687
+    decay = math.exp(
+        -exponent * (1.0 + particle_mass_flow / gas_mass_flow)
+        * duration / stokes_time
+    )
+    scaled_initial = 0.15 * reynolds**exponent
+    relative_magnitude = abs(initial_relative) * (
+        decay / (1.0 + scaled_initial * (1.0 - decay))
+    ) ** (1.0 / exponent)
+    relative_after = math.copysign(relative_magnitude, initial_relative)
+    total_mass_flow = gas_mass_flow + particle_mass_flow
+    gas_after = (
+        momentum_before + particle_mass_flow * relative_after
+    ) / total_mass_flow
+    particle_after = gas_after - relative_after
+    momentum_after = (
+        gas_mass_flow * gas_after + particle_mass_flow * particle_after
+    )
+    kinetic_after = 0.5 * (
+        gas_mass_flow * gas_after**2
+        + particle_mass_flow * particle_after**2
+    )
+    reduced_mass = gas_mass_flow * particle_mass_flow / total_mass_flow
+    thermalised = 0.5 * reduced_mass * (
+        initial_relative**2 - relative_after**2
+    )
+    scale = max(abs(kinetic_before), 1.0)
+    if abs((kinetic_before - kinetic_after) - thermalised) > 128.0 * math.ulp(scale):
+        raise ArithmeticError(
+            "finite-Re two-velocity drag kinetic-energy identity failed"
+        )
+    if abs(momentum_after - momentum_before) > 64.0 * math.ulp(
+        max(abs(momentum_before), 1.0)
+    ):
+        raise ArithmeticError(
+            "finite-Re two-velocity drag failed axial momentum conservation"
+        )
+    return TwoVelocityRelaxation(
+        gas_velocity=gas_after,
+        particle_velocity=particle_after,
+        momentum_before=momentum_before,
+        momentum_after=momentum_after,
+        kinetic_energy_before=kinetic_before,
+        kinetic_energy_after=kinetic_after,
+        thermalised_kinetic_energy=thermalised,
+    )
+
+
+def relax_two_velocity_drag(
+    *, gas_mass_flow: float, particle_mass_flow: float,
+    gas_velocity: float, particle_velocity: float, duration: float,
+    particle_relaxation: float,
+) -> TwoVelocityRelaxation:
+    """Advance a gas/particle axial slip over one constant-drag substep.
+
+    For Stokes drag on a particle mass flow ``m_p`` in gas mass flow ``m_g``,
+
+    ``d(u_g-u_p)/dt = -(1 + m_p/m_g) (u_g-u_p)/tau_p``.
+
+    The exact exponential update below preserves ``m_g*u_g + m_p*u_p``.  It
+    also exposes, rather than discarding, the loss of resolved relative
+    kinetic energy.  The helper accepts a declared ``particle_relaxation``
+    because evaluating a Reynolds-number-dependent drag law inside a finite
+    step is a separate nonlinear model choice.
+
+    A zero particle flow is a well-defined single-velocity limit.  Negative
+    flow, duration or relaxation time is rejected instead of being coerced.
+    """
+    values = {
+        "gas_mass_flow": gas_mass_flow,
+        "particle_mass_flow": particle_mass_flow,
+        "gas_velocity": gas_velocity,
+        "particle_velocity": particle_velocity,
+        "duration": duration,
+        "particle_relaxation": particle_relaxation,
+    }
+    if not all(math.isfinite(value) for value in values.values()):
+        raise ValueError("two-velocity drag inputs must be finite")
+    if gas_mass_flow <= 0.0:
+        raise ValueError("gas mass flow must be positive")
+    if particle_mass_flow < 0.0:
+        raise ValueError("particle mass flow cannot be negative")
+    if duration < 0.0 or particle_relaxation <= 0.0:
+        raise ValueError("duration must be nonnegative and relaxation time positive")
+
+    momentum_before = (
+        gas_mass_flow * gas_velocity + particle_mass_flow * particle_velocity
+    )
+    kinetic_before = 0.5 * (
+        gas_mass_flow * gas_velocity**2
+        + particle_mass_flow * particle_velocity**2
+    )
+    if particle_mass_flow == 0.0 or duration == 0.0:
+        return TwoVelocityRelaxation(
+            gas_velocity=gas_velocity,
+            particle_velocity=particle_velocity,
+            momentum_before=momentum_before,
+            momentum_after=momentum_before,
+            kinetic_energy_before=kinetic_before,
+            kinetic_energy_after=kinetic_before,
+            thermalised_kinetic_energy=0.0,
+        )
+
+    total_mass_flow = gas_mass_flow + particle_mass_flow
+    mean_velocity = momentum_before / total_mass_flow
+    relative_velocity = (gas_velocity - particle_velocity) * math.exp(
+        -(1.0 + particle_mass_flow / gas_mass_flow)
+        * duration / particle_relaxation
+    )
+    gas_after = mean_velocity + particle_mass_flow / total_mass_flow * relative_velocity
+    particle_after = mean_velocity - gas_mass_flow / total_mass_flow * relative_velocity
+    momentum_after = (
+        gas_mass_flow * gas_after + particle_mass_flow * particle_after
+    )
+    kinetic_after = 0.5 * (
+        gas_mass_flow * gas_after**2
+        + particle_mass_flow * particle_after**2
+    )
+    # Compute the loss from the relative-velocity identity, rather than from
+    # subtracting two nearly equal bulk kinetic energies.  This is positive by
+    # construction and is not a clipped numerical remainder.
+    initial_relative = gas_velocity - particle_velocity
+    decay = math.exp(
+        -2.0 * (1.0 + particle_mass_flow / gas_mass_flow)
+        * duration / particle_relaxation
+    )
+    thermalised = 0.5 * gas_mass_flow * particle_mass_flow / total_mass_flow * (
+        initial_relative**2
+    ) * (1.0 - decay)
+    scale = max(abs(kinetic_before), 1.0)
+    if abs((kinetic_before - kinetic_after) - thermalised) > 128.0 * math.ulp(scale):
+        raise ArithmeticError("two-velocity drag kinetic-energy identity failed")
+    if abs(momentum_after - momentum_before) > 64.0 * math.ulp(
+        max(abs(momentum_before), 1.0)
+    ):
+        raise ArithmeticError("two-velocity drag failed axial momentum conservation")
+    return TwoVelocityRelaxation(
+        gas_velocity=gas_after,
+        particle_velocity=particle_after,
+        momentum_before=momentum_before,
+        momentum_after=momentum_after,
+        kinetic_energy_before=kinetic_before,
+        kinetic_energy_after=kinetic_after,
+        thermalised_kinetic_energy=thermalised,
+    )
+
+
+def advance_two_velocity_phase_step(
+    *, gas_mass_flow: float, particle_mass_flow: float,
+    gas_velocity: float, particle_velocity: float,
+    entrained_gas_mass_flow: float, entrained_gas_velocity: float,
+    final_particle_mass_flow: float,
+    duration: float, particle_relaxation: float,
+) -> TwoVelocityPhaseStep:
+    """Conserve a two-velocity control volume through entrainment and phase change.
+
+    ``entrained_gas_mass_flow`` enters at the explicit axial velocity
+    ``entrained_gas_velocity``.  This can be zero for the old quiescent or
+    purely crosswind idealisation, but is not assumed to be zero for a coflow
+    or counterflow. The final particle inventory is supplied by an external
+    thermodynamic phase solve; this function deliberately does not choose a
+    saturation relation or an entrainment coefficient. It only maps a phase
+    inventory into a momentum-consistent two-velocity state and then applies
+    the exact constant-drag substep.
+
+    A positive condensed-mass change transfers material from gas to particles
+    at the mixed pre-transfer gas velocity.  A negative change transfers it
+    back at the particle velocity.  Thus phase transfer itself has no
+    artificial impulse.  Entrainment mixing, inelastic phase-transfer mixing,
+    and interphase drag can all reduce resolved kinetic energy, so their
+    thermalisation ledgers are returned separately instead of being hidden in
+    a temperature solve.
+    """
+    values = {
+        "gas_mass_flow": gas_mass_flow,
+        "particle_mass_flow": particle_mass_flow,
+        "gas_velocity": gas_velocity,
+        "particle_velocity": particle_velocity,
+        "entrained_gas_mass_flow": entrained_gas_mass_flow,
+        "entrained_gas_velocity": entrained_gas_velocity,
+        "final_particle_mass_flow": final_particle_mass_flow,
+        "duration": duration,
+        "particle_relaxation": particle_relaxation,
+    }
+    if not all(math.isfinite(value) for value in values.values()):
+        raise ValueError("two-velocity phase-step inputs must be finite")
+    if gas_mass_flow <= 0.0:
+        raise ValueError("gas mass flow must be positive")
+    if min(particle_mass_flow, entrained_gas_mass_flow, final_particle_mass_flow) < 0.0:
+        raise ValueError("particle and entrained mass flows cannot be negative")
+    if duration < 0.0 or particle_relaxation <= 0.0:
+        raise ValueError("duration must be nonnegative and relaxation time positive")
+
+    total_mass_flow = gas_mass_flow + particle_mass_flow + entrained_gas_mass_flow
+    final_gas_mass_flow = total_mass_flow - final_particle_mass_flow
+    if final_gas_mass_flow <= 0.0:
+        raise ValueError("phase step must retain a positive gas mass flow")
+
+    # The declared entrained stream is an incoming control-volume flux, not a
+    # reservoir with silently deleted momentum. Counting its axial momentum
+    # and kinetic energy here makes a nonzero coflow/counterflow conservative.
+    momentum_before = (
+        gas_mass_flow * gas_velocity
+        + particle_mass_flow * particle_velocity
+        + entrained_gas_mass_flow * entrained_gas_velocity
+    )
+    kinetic_before = 0.5 * (
+        gas_mass_flow * gas_velocity**2 + particle_mass_flow * particle_velocity**2
+        + entrained_gas_mass_flow * entrained_gas_velocity**2
+    )
+
+    # Entrainment mixes the old gas stream and a declared ambient stream. This
+    # is the velocity at which newly condensed mass leaves the gas phase.
+    pretransfer_gas_mass = gas_mass_flow + entrained_gas_mass_flow
+    gas_momentum = (
+        gas_mass_flow * gas_velocity
+        + entrained_gas_mass_flow * entrained_gas_velocity
+    )
+    particle_momentum = particle_mass_flow * particle_velocity
+    pretransfer_gas_velocity = gas_momentum / pretransfer_gas_mass
+    kinetic_after_entrainment = 0.5 * (
+        pretransfer_gas_mass * pretransfer_gas_velocity**2
+        + particle_mass_flow * particle_velocity**2
+    )
+    phase_delta = final_particle_mass_flow - particle_mass_flow
+    if phase_delta >= 0.0:
+        transferred_velocity = pretransfer_gas_velocity
+    elif particle_mass_flow > 0.0:
+        transferred_velocity = particle_velocity
+    else:
+        raise ValueError("cannot re-evaporate absent particle mass")
+    particle_momentum += phase_delta * transferred_velocity
+    gas_momentum -= phase_delta * transferred_velocity
+    phase_gas_velocity = gas_momentum / final_gas_mass_flow
+    phase_particle_velocity = (
+        particle_momentum / final_particle_mass_flow
+        if final_particle_mass_flow > 0.0 else particle_velocity
+    )
+    kinetic_after_phase_transfer = 0.5 * (
+        final_gas_mass_flow * phase_gas_velocity**2
+        + final_particle_mass_flow * phase_particle_velocity**2
+    )
+    # The phase-transfer loss is an inelastic two-stream mixing loss.  Use
+    # its nonnegative reduced-mass form instead of subtracting close kinetic
+    # energies: condensation joins new mass at the pre-transfer gas velocity
+    # to the old particle stream; re-evaporation joins it to the gas stream.
+    if phase_delta >= 0.0:
+        reduced_mass = (
+            particle_mass_flow * phase_delta / final_particle_mass_flow
+            if final_particle_mass_flow > 0.0 else 0.0
+        )
+        phase_relative_velocity = particle_velocity - pretransfer_gas_velocity
+    else:
+        reevaporated = -phase_delta
+        reduced_mass = pretransfer_gas_mass * reevaporated / final_gas_mass_flow
+        phase_relative_velocity = pretransfer_gas_velocity - particle_velocity
+    phase_transfer_thermalised = 0.5 * reduced_mass * phase_relative_velocity**2
+
+    relaxed = relax_two_velocity_drag(
+        gas_mass_flow=final_gas_mass_flow,
+        particle_mass_flow=final_particle_mass_flow,
+        gas_velocity=phase_gas_velocity,
+        particle_velocity=phase_particle_velocity,
+        duration=duration,
+        particle_relaxation=particle_relaxation,
+    )
+    # The phase transfer and drag operator are internal. The declared incoming
+    # streams are all included in ``momentum_before``, so axial momentum must
+    # remain exactly that incoming total.
+    scale = max(abs(momentum_before), 1.0)
+    if abs(relaxed.momentum_after - momentum_before) > 128.0 * math.ulp(scale):
+        raise ArithmeticError("two-velocity phase step failed momentum conservation")
+    entrainment_thermalised = kinetic_before - kinetic_after_entrainment
+    total_thermalised = kinetic_before - relaxed.kinetic_energy_after
+    scale = max(abs(kinetic_before), 1.0)
+    if abs((kinetic_after_entrainment - kinetic_after_phase_transfer)
+           - phase_transfer_thermalised) > 256.0 * math.ulp(scale):
+        raise ArithmeticError("two-velocity phase-transfer energy identity failed")
+    if abs(total_thermalised - (
+        entrainment_thermalised + phase_transfer_thermalised
+        + relaxed.thermalised_kinetic_energy
+    )) > 256.0 * math.ulp(scale):
+        raise ArithmeticError("two-velocity phase-step kinetic-energy identity failed")
+    return TwoVelocityPhaseStep(
+        gas_mass_flow=final_gas_mass_flow,
+        particle_mass_flow=final_particle_mass_flow,
+        entrained_gas_mass_flow=entrained_gas_mass_flow,
+        entrained_gas_velocity=entrained_gas_velocity,
+        gas_velocity=relaxed.gas_velocity,
+        particle_velocity=relaxed.particle_velocity,
+        momentum_before=momentum_before,
+        momentum_after=relaxed.momentum_after,
+        kinetic_energy_before=kinetic_before,
+        kinetic_energy_after=relaxed.kinetic_energy_after,
+        entrainment_thermalised_kinetic_energy=entrainment_thermalised,
+        phase_transfer_thermalised_kinetic_energy=phase_transfer_thermalised,
+        drag_thermalised_kinetic_energy=relaxed.thermalised_kinetic_energy,
+        total_thermalised_kinetic_energy=total_thermalised,
+    )
 
 
 def ranz_marshall_transfer_number(
@@ -749,7 +1421,7 @@ def particle_terminal_velocity(
 
 @dataclass(frozen=True)
 class CondensedAirStep:
-    """One station in the finite-slip source-zone march."""
+    """One station in the declared condensed-air kinematic-limit march."""
 
     distance: float
     temperature: float
@@ -768,7 +1440,7 @@ class CondensedAirStep:
 
 @dataclass(frozen=True)
 class CondensedAirSource:
-    """Result of marching the cryogenic multiphase source zone."""
+    """Result of a no-slip or stationary-condensate source-zone bound."""
 
     temperature: float
     velocity: float
@@ -788,6 +1460,11 @@ class CondensedAirSource:
     maximum_momentum_residual: float
     maximum_energy_residual: float
     rows: tuple[CondensedAirStep, ...]
+    axial_kinematic_limit: str
+    finite_particle_slip_modelled: bool
+    transport_evidence_boundary: str = PARTICLE_SLIP_BOUNDARY.identifier
+    physical_closure_validated: bool = False
+    quantitative_lh2_prediction_allowed: bool = False
 
     @property
     def retained_condensed_flow(self) -> float:
@@ -924,7 +1601,7 @@ def transported_condensed_air_source(
     station2_kinetic_energy: float | None = None,
     stationary_condensate: bool = False,
 ) -> CondensedAirSource:
-    """March a phase-equilibrium, settling condensed-air source zone.
+    """March a phase-equilibrium condensed-air *kinematic-limit* source zone.
 
     This is an off-line source model, not yet a production JetPlume option.
     Ambient air is entrained into a uniform plug flow.  Both N2 and O2 may
@@ -939,10 +1616,12 @@ def transported_condensed_air_source(
     ``station2_kinetic_energy`` lets that two-velocity endpoint carry its
     separately closed kinetic-energy flux into this ledger.
 
-    The common axial velocity is a controlled first implementation.  The
-    particle relaxation-time diagnostic quantifies when this approximation
-    fails; a two-velocity extension must precede production use of the 100 um
-    stress case.
+    The retained-condensate branch is an explicit **no-slip limit**, not a
+    finite particle-slip calculation.  The particle relaxation/drag helpers
+    remain separate conservation kernels until matched particle inventory,
+    size and gas/particle-velocity data are available.  The result therefore
+    records its kinematic limit and cannot be used as a quantitative LH2
+    particle-transport prediction.
     """
     from CoolProp.CoolProp import PropsSI
 
@@ -1399,6 +2078,11 @@ def transported_condensed_air_source(
         maximum_momentum_residual=max_momentum_residual,
         maximum_energy_residual=max_energy_residual,
         rows=tuple(rows),
+        axial_kinematic_limit=(
+            "stationary_condensate_limit" if stationary_condensate
+            else "no_slip_retained_condensate_limit"
+        ),
+        finite_particle_slip_modelled=False,
     )
 
 

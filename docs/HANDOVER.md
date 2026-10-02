@@ -1,5 +1,195 @@
 # Handover
 
+> **LATEST 2026-09-16 — cryo-compressed source path completed to guarded
+> gas/multiphase snapshots:** The opt-in real-gas blowdown boundary now
+> includes transient finite-volume tank and pipe-wall thermal stores, both
+> with caller-declared material and convective boundaries.  A single-phase
+> positive-flow state can become a conserved ambient-pressure gas source plane
+> only when that plane remains gas; `Cd` is represented once as an effective
+> throat area.  For E3.1, the 54 single-phase tank snapshots flash to 0.534--
+> 0.638 quality at ambient pressure, and may instead use the explicit fast
+> complete-evaporation bound (max mass/momentum/energy residual 4.4e-16,
+> 3.7e-16/8.2e-16).  Tank two-phase and terminal states remain rejected rather
+> than silently flashed.  The public E3.1 record is still non-fitted
+> diagnostic only.  The E3.1 initial fast-evaporation source reaches the
+> axisymmetric near-field at 0.15 m with 2.8e-6 maximum energy drift; this is
+> interface stability, not experimental validation.  The source adapter uses
+> the near-field's 295 K ambient default to preserve its enthalpy reference.
+> Focused source/E3.1/phase/throat tests pass (30 passed); wider regression
+> remains due.
+
+> **LATEST 2026-09-16 — two-phase source envelope made explicit:** The
+> cryo-compressed blowdown source has a new opt-in
+> `two_phase_withdrawal="homogeneous"` HEM route, maximising equilibrium
+> common-velocity mass flux on the tank-mixture isentrope while removing the
+> tank-boundary mixture enthalpy (not the post-expansion throat enthalpy) from
+> the tank energy balance.  It is separate from geometry-limited vapour
+> withdrawal and makes no phase-separation/slip/kinetics claim.  For E3.1 at
+> 2 s, the adiabatic vapour/HEM envelopes give 6.60/6.93 bar versus roughly
+> 5.55 bar raw pressure; neither was fitted or promoted.  Focused tests pass
+> (32 passed); wider regression remains due.
+
+> **LATEST 2026-09-15 — non-ideal-volume applicability guard:** The opt-in
+> pure-H2 `Z` screen no longer has to be read as mixture-EOS coverage.  A new
+> explicit strict mode raises when its local pure-gas comparison is unstable
+> instead of silently falling back to the ideal closure; non-strict behaviour
+> and every default remain unchanged.  Six focused axisymmetric non-ideal
+> tests pass.  This is a scope/validity correction, not a new LH2 accuracy
+> claim.
+
+> **LATEST 2026-09-15 — Spadeadam downward-source transcription corrected:**
+> The primary DNV/FFI programme table gives Test 3/5 outflow as 43.8/42.9
+> kg/min (0.730/0.715 kg/s); the local ignored table had 0.630/0.739 kg/s.
+> Correcting those inputs shifts the non-promoted downward diagnostic from
+> MG/VG 4.79/12.32 to 4.74/11.94, retaining FAC2 0.00 and the same over-rise
+> conclusion.  No model coefficient or distributed external data changed.
+
+> **LATEST 2026-09-15 — Spadeadam public anchors reconciled:** The primary
+> FFI outdoor narrative and the locally preserved, ignored static sensor-table
+> transcription now agree for horizontal Tests 4 and 6: 0.828/0.833 kg/s,
+> 17.2/21.0 vol % peak H2 at 30 m, and distinct high/low mast winds.  They
+> are lower-censored peak constraints, never centreline or time-average
+> targets.  The table remains outside the distributed package.  The existing
+> far-field regression passes (1 passed); the complete 55-test cryogenic-air
+> suite also passes after the explicit coflow/counterflow ledger change.
+
+> **LATEST 2026-09-15 — Spadeadam two-velocity evidence closed:** The primary
+> FFI outdoor-release report was visually rechecked. Its 30/50/100 m field
+> array is oxygen-depletion concentration plus thermocouples, with 5/10 m
+> mast weather; it does not describe particle image/size, phase mass, velocity
+> profile or separate gas/particle velocity. It remains an independent
+> downstream concentration/temperature test, not a two-velocity adoption
+> dataset. See `lh2-data-readiness.md`.
+
+> **LATEST 2026-09-15 — exact finite-Re two-velocity drag:** For an explicitly
+> declared constant-property isolated-sphere interval with `Re_p <= 1000`, the
+> optional two-velocity kernel now integrates Schiller--Naumann relative slip
+> analytically rather than freezing an initial response time. It conserves
+> mixture momentum and exposes resolved kinetic-to-thermal conversion. No
+> particle property, variable-property plume trajectory, source coupling or
+> default was selected; 13 focused finite-Re/two-velocity tests pass.
+
+> **LATEST 2026-09-15 — bounded finite-Re slip response:** The optional
+> two-velocity branch now converts declared particle/gas properties and slip
+> to a local Schiller--Naumann response time only for `Re_p <= 1000`.  It
+> deliberately rejects extrapolation and does not turn the constant-response
+> exact drag step into a nonlinear trajectory.  Eleven focused particle/slip
+> tests pass; no diameter, correction, source coupling or default was chosen.
+
+> **LATEST 2026-09-15 — public LH2 model-scope audit:** Sandia's public
+> SAND2023-12548 is now recorded as a direct scope comparison, not an accuracy
+> oracle: its post-orifice dispersion/flame calculation is gas-only and
+> explicitly neglects air/humidity condensation.  DEGALI's opt-in phase and
+> two-velocity helpers therefore cover mechanisms outside that scope, but no
+> accuracy advantage is claimed without phase-resolved measurements.  Read
+> [`public-lh2-model-scope-audit.md`](public-lh2-model-scope-audit.md).
+
+> **LATEST 2026-09-14 — finite gas--condensate slip kernel:** An exact,
+> explicit-input two-velocity drag update now conserves axial momentum and
+> reports relative kinetic-energy loss as a separate thermalisation ledger.
+> It is not coupled to the default source: no particle mass/size/initial-slip
+> measurement supports that. Focused cryogenic-air tests pass (3 passed).
+> Read `two-velocity-slip-status.md` before any source coupling.
+
+> **2026-09-15 — phase-transfer ledger closed:** The two-velocity control
+> volume now separates zero-momentum entrainment mixing, inelastic phase-
+> transfer mixing, and drag heating. Their sum equals the resolved kinetic-
+> energy decrease while axial momentum is conserved. Four focused tests pass;
+> it remains an explicit-input kernel, not a default source change.
+
+> **LATEST 2026-09-13 — dilute phase-inverse roundoff guard corrected:** The
+> bilinear C/H inverse and its independent phase-oracle check disagreed by a
+> single floating-point tolerance unit at an almost-zero-enthalpy ambient
+> endpoint after the humid-property update. The root tolerance remains
+> `1e-10`; only the independent re-evaluation guard now permits two such
+> units, not a changed physical state or clipped inverse. Thermal/profile
+> regressions pass (83 passed).
+
+> **LATEST 2026-09-13 — finite-TKE PSD screen made executable:** Any declared
+> finite-TKE end member can now be checked against its public axial-RMS/
+> shear PSD lower bound through `tke_realizability_margin`. A negative margin
+> is reported and rejected without lifting `k`, assuming isotropy or inventing
+> epsilon. Focused parameterization/normal-stress/redistribution tests pass
+> (24 passed).
+
+> **2026-09-14 — finite-TKE transport input gate:** The optional transport
+> now applies the axial-RMS PSD screen pointwise only when both RMS and its
+> two axial shear covariances are supplied. Missing one, or supplying a TKE
+> deficit, is rejected without repair; omitting both keeps the existing
+> unobserved research path. Focused TKE tests pass (25 passed).
+
+> **LATEST 2026-09-13 — Sandia public-data follow-up exhausted:** A renewed
+> OSTI/DOE/Sandia archive search confirmed Raman/PIV capability but found no
+> downloadable velocity RMS, Reynolds stress, epsilon or particle-size arrays.
+> No coefficient or pseudo-measurement was added; the LES/Raman evidence stays
+> a bound/diagnostic only.
+
+> **LATEST 2026-09-13 — humid equilibrium property correction:** The optional
+> N2/O2/Ar/H2O equilibrium near-field already existed; its low-temperature
+> H2O pressure was replaced with the traceable Murphy--Koop stable-ice law in
+> its 110 K-and-above domain, plus an explicitly labelled continuity-preserving
+> low-temperature extension. This affects only the opt-in humid equilibrium
+> limit, not the default dry source, and does not claim finite frost kinetics.
+> Non-slow axisymmetric tests pass (23 passed, 13 deselected); the longer
+> cryogenic-air suite is being rerun in the project virtual environment.
+
+> **2026-09-14 quantification:** Relative to the removed untraceable H2O
+> exponential, the stable-ice pressure is 2.4%, 11%, 37% and 78% at 110, 150,
+> 200 and 250 K respectively, while matching the 273.16 K triple point. The
+> correction affects only opt-in humid equilibrium; it is not a frost-rate
+> prediction or a default-source change.
+
+> **LATEST 2026-09-13 — Li Zone-III implementation consolidated:** Li et al.
+> (2026) had already been reproduced and regression-tested as
+> `cryogenic_air.li2026_zone3`; a newly drafted duplicate was removed rather
+> than retaining two inconsistent source paths. The existing implementation
+> reproduces the paper only behind an explicit sub-triple metastable-liquid
+> switch and is not a PRESLHY/LH2 default. Its phase-domain and energy-balance
+> audit is `li2026-air-condensation-audit.md`.
+
+> **LATEST 2026-09-13 — public scalar-RMS search exhausted for now:** The
+> newly located open 2026 Sandia-case LES/POD paper has 540 snapshot fields,
+> but states its numerical data are available only on request; its reported
+> LES/experimental flammability-contour discrepancy is about 27%. It is not
+> used for DEGALI calibration. No downloadable location-resolved cryogenic-H2
+> RMS/PDF archive was located. `scalar_fluctuations` remains an explicit
+> observation diagnostic; its rounded-public-number incompatibility is kept,
+> not clipped. GitHub push remains deferred.
+
+> **LATEST 2026-09-12 — pressure--strain guard added, no LH2 closure claim:**
+> `reynolds_stress_redistribution` now enforces trace-free slow
+> pressure--strain redistribution and returns an exact PSD time-step limit
+> without clipping covariance. It requires `R,k,epsilon,C_phi` explicitly;
+> no field data or default coefficient was inserted into the finite-TKE
+> transport. Focused TKE/normal-stress/redistribution tests pass (22 passed,
+> 1 skipped). Read `pressure-strain-redistribution-status.md` before any
+> coupling attempt. GitHub push remains deferred.
+
+> **LATEST 2026-09-12 — finite-TKE end-member inputs made explicit:** Public
+> searches found a cryogenic RANS `k-epsilon` comparison formulation but no
+> matched experimental epsilon/integral scale. New
+> `tke_parameterization` therefore converts only user-declared
+> `L,k,C_e,nu_t,sigma_k` to `tau` and `chi_k`; it has no defaults and cannot
+> promote a closure. Its six focused tests plus the finite-TKE/normal-stress
+> suite pass (18 passed, 1 skipped). The registered public protocol is
+> `prereg-finite-tke-public-envelope.md`; next is a predeclared end-member
+> run only when a trial supplies every input, not coefficient hunting. No
+> external raw data may be committed, and GitHub push remains deferred.
+
+> **LATEST 2026-09-10 — public turbulence evidence removes the immediate
+> data-wait:** The open Sandia concentration-fluctuation manuscript and a 2024
+> institutional LES manuscript have been read. Sandia supplies scalar RMS,
+> intermittency and PDF-shape evidence; the LES supplies mean and axial-RMS
+> velocity contours for the 5 bar/50 K/1 mm case. Registered figure reduction
+> gives shear-layer `u_rms/U` about .33--.40 from z=.01--.06 m, hence the
+> coefficient-free PSD lower bound `k/(U^2/2)` about .11--.16. New
+> `minimum_tke_from_axial_rms` enforces the exact Schur-complement bound without
+> isotropy or clipping. This is a physical screening envelope, NOT experimental
+> validation and NOT an epsilon/dissipation closure. Read
+> `public-turbulence-evidence-audit.md`; next run a preregistered finite-TKE
+> end-member sensitivity spanning explicit dissipation times. No external raw
+> data may be committed, and GitHub push remains deferred.
+
 > **LATEST 2026-09-10 — identical-sensor thermal-moment audit complete, no
 > promotion:** A physically scoped `radial_core` option now evaluates the
 > complete-contour diffusivity identity only for q<=q0 while leaving every
@@ -177,6 +367,9 @@
 > FIRST. New D audit82rows=41sensors×2flow choices,4field replays/22sections
 > exact, no new integration.21new/197related tests PASS,134frozen unchanged.
 > Source evidence+9coldcomposition inventory COMPLETE in cold-mixed-phase-evidence.md.
+> 2026-09-15: open N2--O2 phase-diagram cross-check confirms the 59--63 K
+> states are a mixed-phase applicability boundary, not a defensible numerical
+> closure. No new phase fraction, enthalpy fit, or default was introduced.
 > Next bounded D: actual meanKE/thermal flux and upstream mechanical energy
 > scale versus near-core cold gap; distinguish local KE from advected upstream
 > TKE. No fitted k/phase-delay, no repeated synthetic audit. Deadline15:50KST.

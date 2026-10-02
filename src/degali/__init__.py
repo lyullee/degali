@@ -40,7 +40,7 @@ or from a shell::
     degali jet EX2.INO --bridge EX2.IN
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .run import (
     Receptor,
@@ -53,14 +53,31 @@ from .run import (
     run_transient,
 )
 from .lh2 import (
+    ApplicabilityError,
+    Assessment,
+    AssessmentEnvelope,
+    ObservationEnvelope,
+    ObservationEnvelopeRow,
+    JetSensorProjection,
     LH2CoupledResearchResult,
     LH2CrosswindHandoff,
     LH2ExpandedSource,
+    LH2FiniteReleaseResearchResult,
+    LH2RainoutPoolResearchResult,
     LH2NearFieldResearchResult,
+    LH2YawedCrosswindResearchResult,
     handoff_lh2_near_field_to_crosswind,
     lh2_source_from_measured_throat,
     run_lh2_near_field_research,
     run_lh2_crosswind_research,
+    run_lh2_yawed_crosswind_research,
+    run_lh2_finite_release_research,
+    run_lh2_rainout_pool_research,
+    assess,
+    assess_envelope,
+    assess_observation_envelope,
+    project_lh2_jet_to_sensors,
+    assess_pool_history,
 )
 
 __all__ = [
@@ -70,7 +87,17 @@ __all__ = [
     "run_jet_to_ground",
     "LH2ExpandedSource", "LH2NearFieldResearchResult", "LH2CrosswindHandoff",
     "LH2CoupledResearchResult",
+    "LH2FiniteReleaseResearchResult",
+    "LH2RainoutPoolResearchResult",
+    "LH2YawedCrosswindResearchResult",
+    "ApplicabilityError", "Assessment", "AssessmentEnvelope",
+    "ObservationEnvelope", "ObservationEnvelopeRow",
+    "JetSensorProjection",
+    "assess", "assess_envelope", "assess_observation_envelope",
+    "project_lh2_jet_to_sensors", "assess_pool_history",
     "handoff_lh2_near_field_to_crosswind",
     "lh2_source_from_measured_throat", "run_lh2_near_field_research",
-    "run_lh2_crosswind_research",
+    "run_lh2_crosswind_research", "run_lh2_yawed_crosswind_research",
+    "run_lh2_finite_release_research",
+    "run_lh2_rainout_pool_research",
 ]

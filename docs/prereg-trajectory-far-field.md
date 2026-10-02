@@ -19,9 +19,10 @@ the three.
 > other non-horizontal tests were outdoor downward releases does not: DNV GL
 > Report 902696 shows that tests 8--15 are a separate closed-room and
 > ventilation-mast campaign. Test 15 was wrongly included in the downward
-> statistic. The corrected outdoor result is n=5, MG 4.79, VG 12.32 and FAC2
-> 0.00. Sections below are updated where this source-classification error
-> affected a numerical claim.
+> statistic. A subsequent primary-table audit also corrected the local Test-3
+> and Test-5 release rates to 0.730 and 0.715 kg/s. The corrected outdoor
+> result is n=5, MG 4.74, VG 11.94 and FAC2 0.00. Sections below are updated
+> where these source-data errors affected a numerical claim.
 
 ---
 
@@ -386,7 +387,7 @@ comparison independent code paths:
 | comparison | n | MG | VG | FAC2 |
 |---|---|---|---|---|
 | horizontal, `JetPlume`, ground contact off | 6 arcs | 3.22 | 6.00 | 0.17 |
-| downward, `LiftoffPlume` | 5 tests | **4.79** | 12.32 | 0.00 |
+| downward, `LiftoffPlume` | 5 tests | **4.74** | 11.94 | 0.00 |
 
 **Two buoyant plume models, written by different people for different
 purposes, over-predict dilution by more than a factor of three on the same

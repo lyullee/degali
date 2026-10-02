@@ -45,8 +45,10 @@ Use ``legacy`` to prove the port, ``coolprop`` to improve it.
 from __future__ import annotations
 
 import math
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field
-from typing import Literal
+from typing import ClassVar, Literal
 
 import numpy as np
 
@@ -121,11 +123,15 @@ class CoolPropBackend(ThermoBackend):
     transient run stops being practical.
 
     So each property is tabulated once on a fine grid and interpolated
-    thereafter.  Interpolation keeps the result a smooth function of
-    temperature, which matters because the integrators effectively
-    differentiate these properties: caching on a rounded temperature would be
-    faster still, but it would put small steps into them and the adaptive step
-    control would chase those steps.
+    thereafter.  The immutable grids are shared by every compatible backend
+    in the process.  This matters for LH2 envelopes: each scenario constructs
+    its own model, but it should not pay another 4001 CoolProp calls for a
+    property already tabulated at the same pressure and temperature span.
+    Interpolation keeps the result a smooth function of temperature, which
+    matters because the integrators effectively differentiate these
+    properties: caching on a rounded temperature would be faster still, but
+    it would put small steps into them and the adaptive step control would
+    chase those steps.
 
     Parameters
     ----------
@@ -156,6 +162,13 @@ class CoolPropBackend(ThermoBackend):
     #: do not exist, and the interpolation that remains is coarser for it.
     FLOOR = 4.0
 
+    #: Maximum number of immutable property grids retained for reuse.  One
+    #: grid is about 64 kB at the default resolution, so this keeps the cache
+    #: bounded while leaving ample room for several fluids and pressures.
+    SHARED_TABLE_LIMIT = 128
+    _shared_grids: ClassVar[OrderedDict[tuple, tuple]] = OrderedDict()
+    _shared_grid_lock: ClassVar[threading.RLock] = threading.RLock()
+
     def __init__(
         self, contaminant: str | None = None, span=None, *,
         force_contaminant_gas: bool = False,
@@ -173,6 +186,11 @@ class CoolPropBackend(ThermoBackend):
         self.force_contaminant_gas = force_contaminant_gas
         self._tmin_water = 273.16  # CoolProp water triple point
         self._grids: dict[str, tuple] = {}
+        # A short property name is convenient to callers and existing tests,
+        # but contaminant tables also depend on pressure, phase forcing and
+        # fluid.  Keep that full identity separately so a backend cannot
+        # accidentally reuse its own table after one of those inputs changes.
+        self._grid_context: dict[str, tuple] = {}
         #: Properties for which an equation-of-state lookup failed and a
         #: fallback was used, with a count.
         #:
@@ -199,6 +217,54 @@ class CoolPropBackend(ThermoBackend):
                 span = None
         self.SPAN = span or self.SPAN
 
+    @classmethod
+    def clear_shared_tables(cls) -> None:
+        """Drop process-wide CoolProp interpolation tables.
+
+        Normal model code never needs this.  It is provided for benchmarks,
+        tests, and long-running applications that deliberately switch the
+        underlying CoolProp installation in the same Python process.
+        """
+        with cls._shared_grid_lock:
+            cls._shared_grids.clear()
+
+    @classmethod
+    def shared_table_count(cls) -> int:
+        """Number of reusable property tables currently held in memory."""
+        with cls._shared_grid_lock:
+            return len(cls._shared_grids)
+
+    def _shared_grid_key(
+        self, key: str, pressure: float, lo: float, hi: float,
+    ) -> tuple:
+        """Identity of a property table, including every physical input."""
+        contaminant = self.contaminant if key in {"cpc", "rhoc"} else None
+        force_gas = self.force_contaminant_gas if contaminant is not None else False
+        property_pressure = float(pressure) if contaminant is not None else 0.0
+        return (
+            key,
+            self._props,
+            contaminant,
+            force_gas,
+            property_pressure,
+            float(lo),
+            float(hi),
+            int(self.POINTS),
+        )
+
+    @classmethod
+    def _remember_shared_grid(cls, cache_key: tuple, grid: tuple) -> tuple:
+        """Insert an immutable grid into the bounded process-wide cache."""
+        cached = cls._shared_grids.get(cache_key)
+        if cached is not None:
+            cls._shared_grids.move_to_end(cache_key)
+            return cached
+        cls._shared_grids[cache_key] = grid
+        cls._shared_grids.move_to_end(cache_key)
+        while len(cls._shared_grids) > cls.SHARED_TABLE_LIMIT:
+            cls._shared_grids.popitem(last=False)
+        return grid
+
     def _interp(self, key: str, temp: float, compute, pressure: float = 0.0) -> float:
         """Evaluate a property from a precomputed grid, extending it if needed.
 
@@ -210,33 +276,59 @@ class CoolPropBackend(ThermoBackend):
         small steps into functions the integrators differentiate.
         """
         grid = self._grids.get(key)
-        if grid is None or not (grid[0] <= temp <= grid[1]):
+        context = self._grid_context.get(key)
+        if grid is not None and grid[0] <= temp <= grid[1]:
+            requested = self._shared_grid_key(
+                key, pressure, grid[0], grid[1]
+            )
+            if context is None:
+                # Compatibility for a caller that supplied an old-style
+                # instance-local grid directly.
+                self._grid_context[key] = requested
+                return float(np.interp(temp, grid[2], grid[3]))
+            if context == requested:
+                return float(np.interp(temp, grid[2], grid[3]))
+            # The same backend was asked for the pressure-dependent property
+            # at a new pressure.  Reuse the span, not the old values.
+            lo, hi = grid[0], grid[1]
+        else:
             lo, hi = (grid[0], grid[1]) if grid else self.SPAN
             if temp < lo:
                 lo = max(temp - self.MARGIN, self.FLOOR)
             if temp > hi:
                 hi = temp + self.MARGIN
-            xs = np.linspace(lo, hi, self.POINTS)
-            ys = np.empty(self.POINTS)
-            ok = np.zeros(self.POINTS, dtype=bool)
-            for i, x in enumerate(xs):
-                try:
-                    ys[i] = compute(float(x), pressure)
-                    ok[i] = True
-                except Exception:
-                    ok[i] = False
-            if not ok.any():
-                raise ValueError(f"no usable {key!r} data over {lo}-{hi} K")
-            if not ok.all():
-                # Part of the span is outside the fluid's single-phase region
-                # -- a cryogenic release sits below its own saturation line at
-                # ambient pressure. Hold the nearest valid value across the
-                # gap rather than abandoning the whole grid, which would
-                # silently drop back to the 1989 correlation for the entire
-                # run.
-                ys = np.interp(xs, xs[ok], ys[ok])
-            grid = (lo, hi, xs, ys)
+
+        context = self._shared_grid_key(key, pressure, lo, hi)
+        grid = None
+        with self._shared_grid_lock:
+            grid = self._shared_grids.get(context)
+            if grid is not None:
+                self._shared_grids.move_to_end(context)
+            else:
+                lo, hi = context[5], context[6]
+                xs = np.linspace(lo, hi, self.POINTS)
+                ys = np.empty(self.POINTS)
+                ok = np.zeros(self.POINTS, dtype=bool)
+                for i, x in enumerate(xs):
+                    try:
+                        ys[i] = compute(float(x), pressure)
+                        ok[i] = True
+                    except Exception:
+                        ok[i] = False
+                if not ok.any():
+                    raise ValueError(f"no usable {key!r} data over {lo}-{hi} K")
+                if not ok.all():
+                    # Part of the span is outside the fluid's single-phase
+                    # region. Hold the nearest valid value across the gap
+                    # rather than silently abandoning the EOS table.
+                    ys = np.interp(xs, xs[ok], ys[ok])
+                xs.setflags(write=False)
+                ys.setflags(write=False)
+                grid = self._remember_shared_grid(
+                    context, (lo, hi, xs, ys)
+                )
             self._grids[key] = grid
+            self._grid_context[key] = context
         return float(np.interp(temp, grid[2], grid[3]))
 
     def _vapour_pressure(self, t: float, _p: float = 0.0) -> float:

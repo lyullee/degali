@@ -3462,6 +3462,32 @@ def test_lozenge_profile_shape_factor():
     assert s.peak_concentration > s.concentration
 
 
+def test_pool_assessment_uses_lozenge_axis_not_conserved_section_mean():
+    """A reported pool LFL reach is a point/axis value, never a section mean."""
+    from types import SimpleNamespace
+
+    from degali.addons.liftoff import LiftoffState
+    from degali.lh2 import _pool_centreline_mole_fraction
+
+    state = LiftoffState(
+        s=0.0, x=0.0, z=1.0, theta=0.0, u=1.0, radius=2.0, area=1.0,
+        concentration=0.04, density=1.0, ground_contact=1.0,
+        segment_length=0.0,
+    )
+
+    class IdentityTable:
+        @staticmethod
+        def from_mass_fraction(wc, *, wa):
+            assert wa == 0.0
+            return SimpleNamespace(yc=wc)
+
+    # A circular Gaussian has a peak about 2.6 times its section mean.
+    assert _pool_centreline_mole_fraction(state, IdentityTable()) == pytest.approx(
+        state.peak_concentration
+    )
+    assert _pool_centreline_mole_fraction(state, IdentityTable()) > state.concentration
+
+
 # ==========================================================================
 # the liquid hydrogen entry point
 # ==========================================================================
@@ -6683,7 +6709,12 @@ def test_a_downward_release_is_refused_rather_than_guessed():
 
     down = trials[5]
     assert down.downward_outdoor
-    assert down.rate == pytest.approx(0.739)
+    assert down.rate == pytest.approx(0.715)
+    # FFI-RAPPORT 20/03101 and DNV GL 853182 Table 1 agree on the
+    # outdoor Test-3/Test-5 values.  Keep this guard beside the source-class
+    # assertions so a future transcription cannot silently move the
+    # non-promoted downward diagnostic.
+    assert trials[3].rate == pytest.approx(0.730)
     # it carries real signal, which is what makes refusing it a choice
     assert max(down.arc(30.0).values()) > 5.0
     with pytest.raises(ValueError, match="downward"):
@@ -6748,10 +6779,13 @@ def test_the_downward_releases_show_the_same_fault_independently():
     The fluid arrives essentially undiluted, so what is left is a ground-level
     source of unknown footprint.
 
-    **The footprint was measured before a value was picked for it.** Sweeping
-    it eighty-fold, 0.05 m to 4 m, moves the 30 m concentration by seven per
-    cent and the plume centre by half a metre. The unknown does not matter,
-    which is what makes these five outdoor tests usable at all.
+    **The footprint sensitivity is measured before a value is picked for it.**
+    Sweeping it eighty-fold, 0.05 m to 4 m, bounds the 30 m *axis*
+    concentration response.  It is not a calibration degree of freedom:
+    following the correction from a conserved section mean to a Gaussian axis
+    value, the response is about twenty per cent.  That is much smaller than
+    the multi-fold downward-path bias below, but it means these tests remain a
+    qualitative diagnostic rather than a quantitative validation.
 
     They go through `addons.LiftoffPlume` -- the URAHFREP ground-truncated
     buoyant plume -- and not through `JetPlume`. So the two halves of the
@@ -6761,14 +6795,15 @@ def test_the_downward_releases_show_the_same_fault_independently():
     comparison                                   n         MG     VG    FAC2
     ==========================================  ========  =====  ====  =====
     horizontal, JetPlume, ground contact off     6 arcs    1.25   1.37  0.83
-    downward, LiftoffPlume                       5 tests   4.79  12.32  0.00
+    downward, LiftoffPlume                       5 tests   1.92   1.62  0.80
     ==========================================  ========  =====  ====  =====
 
     **Two buoyant plume models, written by different people for different
-    purposes, underpredict concentration on the same campaign, but the
-    conserved JetPlume is much closer.** The downward impingement path remains
-    strongly biased and cannot be used as a quantitative validation of the
-    horizontal source correction.
+    purposes, retain a common under-prediction direction on this campaign.**
+    The Gaussian-axis correction makes the ground-level result substantially
+    closer, but the unmeasured impingement footprint means this path remains a
+    bounded diagnostic, not a quantitative validation of the horizontal
+    source correction.
 
     It is worth noting what the URAHFREP model is: AEA Technology's own, built
     for this problem, and reported by them as over-predicting rise. It does so
@@ -6780,12 +6815,16 @@ def test_the_downward_releases_show_the_same_fault_independently():
 
     trials = {t.test: t for t in sp.load(SPADEADAM)}
 
-    # the footprint does not matter
+    # The unmeasured impingement footprint is explicitly bounded, not tuned.
+    # Axis concentrations are necessarily more footprint-sensitive than the
+    # former (incorrect for this output) conserved section mean.  The limit
+    # guards against an unphysical, order-one dependence without concealing
+    # the resolved ~20 % source-boundary uncertainty.
     spread = [
         sp.compare_downward(trials[5], footprint=d)[1]
         for d in (0.05, 0.5, 4.0)
     ]
-    assert max(spread) / min(spread) < 1.15
+    assert max(spread) / min(spread) < 1.25
 
     observed, predicted, centres = [], [], []
     for n in sp.OUTDOOR_DOWNWARD:
@@ -6797,17 +6836,18 @@ def test_the_downward_releases_show_the_same_fault_independently():
 
     s = statistics(observed, predicted)
     assert s.n == 5
-    assert s.mg == pytest.approx(4.79, rel=0.05)
-    assert s.vg == pytest.approx(12.32, rel=0.05)
-    assert s.fac2 == pytest.approx(0.0, abs=0.01)
+    assert s.mg == pytest.approx(1.92, rel=0.05)
+    assert s.vg == pytest.approx(1.62, rel=0.05)
+    assert s.fac2 == pytest.approx(0.80, abs=0.01)
 
     # and the plume is put metres up on every one of them
     assert min(centres) > 2.0
     assert max(centres) > 5.0
 
-    # same bias direction, but the unresolved impingement path is much worse
+    # Same bias direction, but the unresolved impingement path is still worse
+    # than the horizontal source correction.
     jet_mg = 1.245
-    assert 3.0 < s.mg / jet_mg < 4.5
+    assert 1.3 < s.mg / jet_mg < 2.0
 
     # a horizontal test is refused by this path, as a downward one is by the
     # other: neither is quietly run through the wrong source term

@@ -64,6 +64,32 @@ class ModelProfileProjection:
     hydrogen_moment: TruncatedProfileMoment
 
 
+@dataclass(frozen=True)
+class EmpiricalScalarEnvelope:
+    """Distribution-free comparison of one steady value with time samples.
+
+    The rank convention assigns half weight to ties. It is an empirical
+    location in the recorded time window, not a claim that samples are
+    independent or normally distributed.
+    """
+
+    count: int
+    minimum: float
+    p05: float
+    p25: float
+    mean: float
+    median: float
+    p75: float
+    p95: float
+    maximum: float
+    sample_standard_deviation: float
+    prediction: float
+    prediction_midrank: float
+    prediction_minus_mean: float
+    prediction_minus_median: float
+    within_p05_p95: bool
+
+
 def truncated_profile_moment(coordinate, scalar) -> TruncatedProfileMoment:
     """Return zeroth, centroid and central second moment on a finite line."""
     z = np.asarray(coordinate, dtype=float)
@@ -82,6 +108,45 @@ def truncated_profile_moment(coordinate, scalar) -> TruncatedProfileMoment:
     if variance < -1.0e-14:
         raise ValueError("negative profile variance")
     return TruncatedProfileMoment(zeroth, centre, max(variance, 0.0))
+
+
+def empirical_scalar_envelope(samples, prediction) -> EmpiricalScalarEnvelope:
+    """Summarize recorded scalar samples and locate a steady prediction.
+
+    This helper deliberately makes no PDF, effective-sample-size, or sensor
+    response-time assumption. Callers apply their pre-registered signal gate.
+    """
+    values = np.asarray(samples, dtype=float)
+    predicted = float(prediction)
+    if (
+        values.ndim != 1
+        or values.size < 2
+        or not np.all(np.isfinite(values))
+        or not math.isfinite(predicted)
+    ):
+        raise ValueError("at least two finite samples and a finite prediction required")
+    lower = int(np.sum(values < predicted))
+    equal = int(np.sum(values == predicted))
+    rank = (lower + 0.5 * equal) / values.size
+    return EmpiricalScalarEnvelope(
+        count=int(values.size),
+        minimum=float(np.min(values)),
+        p05=float(np.percentile(values, 5)),
+        p25=float(np.percentile(values, 25)),
+        mean=float(np.mean(values)),
+        median=float(np.median(values)),
+        p75=float(np.percentile(values, 75)),
+        p95=float(np.percentile(values, 95)),
+        maximum=float(np.max(values)),
+        sample_standard_deviation=float(np.std(values, ddof=1)),
+        prediction=predicted,
+        prediction_midrank=float(rank),
+        prediction_minus_mean=float(predicted - np.mean(values)),
+        prediction_minus_median=float(predicted - np.median(values)),
+        within_p05_p95=bool(
+            np.percentile(values, 5) <= predicted <= np.percentile(values, 95)
+        ),
+    )
 
 
 def project_model_profile(
@@ -449,8 +514,10 @@ def summarize_paired_profile_moments(data: dict) -> dict:
 __all__ = [
     "LagEstimate",
     "ModelProfileProjection",
+    "EmpiricalScalarEnvelope",
     "TruncatedProfileMoment",
     "best_integer_lag",
+    "empirical_scalar_envelope",
     "project_model_profile",
     "read_paired_profiles",
     "summarize_paired_profile_moments",

@@ -8,9 +8,45 @@ from degali.validation.preslhy import (
     compensate_pipe_temperature_c,
     read_nearfield_temperatures,
     read_pipe_source,
+    read_trial,
+    synchronized_gas_window,
     type_t_emf_mv,
     type_t_temperature_c,
 )
+
+
+def test_synchronized_gas_window_uses_clocks_and_only_a_declared_delay():
+    flow = [12 * 3600 + value for value in (0.0, 1.0, 2.0, 3.0, 4.0)]
+    gas = [12 * 3600 + value for value in (0.2, 0.5, 1.2, 1.5, 2.2, 2.5, 3.2)]
+    assert synchronized_gas_window(flow, gas, (1, 3)) == (2, 6)
+    assert synchronized_gas_window(flow, gas, (1, 3), gas_transport_delay_s=1.0) == (4, 7)
+    assert synchronized_gas_window([float("nan")], gas, (0, 1)) is None
+    with pytest.raises(ValueError, match="cannot be negative"):
+        synchronized_gas_window(flow, gas, (1, 3), gas_transport_delay_s=-0.1)
+
+
+def test_trial_reader_applies_documented_xensor_delay_when_clocks_exist(tmp_path):
+    """The E3.5 18-s line delay belongs in the observation operator, not a fit."""
+    path = tmp_path / "trial_10_clocked.xlsx"
+    book = openpyxl.Workbook()
+    flow = book.active
+    flow.title = "Flowmeter"
+    flow.append(["clock", "FlMassFlowRategsecR0247"])
+    for second in range(45):
+        flow.append([f"12:00:{second:02d}", 10.0 if 10 <= second < 30 else 0.0])
+    gas = book.create_sheet("Xensor")
+    gas.append(["clock", "X2019_09_04_02EC25Output"])
+    for second in range(70):
+        gas.append([f"12:00:{second:02d}", float(second)])
+    book.save(path)
+
+    positions = {"02EC25": (1.0, 0.0, 0.0)}
+    delayed = read_trial(path, positions, threshold=0.5, floor=0.0)
+    unshifted = read_trial(
+        path, positions, threshold=0.5, floor=0.0, gas_transport_delay_s=0.0,
+    )
+    assert delayed.readings[0].samples == unshifted.readings[0].samples
+    assert delayed.readings[0].mean > unshifted.readings[0].mean
 
 
 def test_table_a3_keeps_unicode_negative_and_long_serials():

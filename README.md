@@ -132,7 +132,65 @@ The principal outputs are:
 - `lowest_flammable_height`: lowest flammable-gas height, m;
 - `regime`: `grounded`, `low`, or `aloft`;
 - `trajectory`: NumPy columns `[distance, centre height, mole fraction]`;
-- `warnings`: validation-range and applicability warnings. Do not discard them.
+- `warnings`: validation-range and applicability warnings. Do not discard them;
+- `screening_scope`: `qualified`, `conditional`, or `out_of_scope`.
+
+For an automated screening gate, add `strict_scope=True`; an out-of-range
+request raises `ApplicabilityError` instead of returning an extrapolated value.
+For explicit source/wind sensitivity, use `assess_envelope(rates=[...],
+winds=[...], ...)`. The supplied values are evaluated without fitting a
+correction or claiming a statistical confidence interval.
+
+To diagnose a measured centreline point such as the FFI Test 6 residual, use
+`assess_observation_envelope(...)`. It returns every declared rate/wind
+hypothesis within the requested factor of the observation. Multiple matches
+are reported as non-identifiable; DEGALI never chooses a fitted correction.
+Sensor-height or arc-maximum values require a separate validated observation
+operator and cannot be inferred from this centreline diagnostic.
+For exact mast coordinates, `project_lh2_jet_to_sensors(points_m=[...])`
+evaluates the Gaussian vertical/lateral profile directly and returns mole
+fraction and temperature at each point.
+
+Horizontal releases at a non-zero bearing can be explored with
+`run_lh2_yawed_crosswind_research()`. This uses the conserved six-flux yaw
+kernel, rejects reverse-axial flow, and is explicitly marked unvalidated; it
+does not change the primary `assess()` path.
+
+For a defensible comparison with another consequence model, use the comparison
+gate rather than comparing screenshots or separately reduced tables. It
+requires identical source, wind vector, receptor operator, averaging window,
+phase closure and geometry; a fitted prediction is reported but cannot win a
+ranking:
+
+```python
+from degali.validation import ComparisonCase, ModelPrediction, compare_models
+
+case = ComparisonCase(
+    source_mode="horizontal_jet", source_rate_kg_s=0.12,
+    wind_speed_m_s=2.0, wind_direction_rad=0.0, release_height_m=1.0,
+    receptor_operator="arc_max_1s_peak", averaging_time_s=1.0,
+    phase_closure="measured_throat", geometry="open_horizontal",
+)
+report = compare_models(
+    observations,
+    [
+        ModelPrediction("degali", degali_values, case),
+        ModelPrediction("other_model", other_values, case),
+    ],
+    case=case,
+)
+print(report.ranking_allowed, report.results)
+```
+
+This protocol does not claim that DEGALI is generally more accurate than
+HyRAM, PHAST or EFFECTS. It makes that claim testable when independently
+generated predictions are available and otherwise reports that no ranking was
+performed.
+
+For a workflow-level safety check, `degali.validation.evaluate_screening()`
+combines the result scope with an optional obstacle-geometry screen. It can
+approve a qualified clear-path *screening* run, but it always returns
+`design_basis_allowed=False` and `approval_allowed=False`.
 
 Specify exactly one source geometry: `orifice` for a pressurised jet or
 `pool_diameter` for a pool/evaporation source. `storage_pressure` is bar(a),

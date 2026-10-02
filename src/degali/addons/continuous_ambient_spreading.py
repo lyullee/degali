@@ -46,6 +46,10 @@ def with_continuous_ambient_spreading(original):
         houf_width_mapping=original.houf_width_mapping, ground_interaction=original.ground_interaction,
         thermal_relaxation_rate=original.thermal_relaxation_rate,
         phase_transition_lag_rate=original.phase_transition_lag_rate,
-        turbulence_heat_exchange_rate=original.turbulence_heat_exchange_rate)
+        turbulence_heat_exchange_rate=original.turbulence_heat_exchange_rate,
+        ground_heat_transfer_coefficient_w_m2_k=(
+            original.ground_heat_transfer_coefficient_w_m2_k
+        ),
+        ground_surface_temperature_k=original.ground_surface_temperature_k)
     candidate.velocity_shape_exponent = original.velocity_shape_exponent
     return candidate

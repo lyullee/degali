@@ -29,7 +29,8 @@ from degali.validation.nearfield import IndependentEnergyTrajectory, hydrogen_ga
 from degali.validation.preslhy import TemperatureReading, read_nearfield_temperatures
 
 
-def thermodynamics(trial, *, consistent, argon=False):
+def thermodynamics(trial, *, consistent, argon=False,
+                   water_ice_property_model="murphy_koop_2005"):
     ta, pa, rh = trial["T_C"] + 273.15, 101325., trial["RH_pct"]
     mw_air, mw_water = PropsSI("M", "Air"), PropsSI("M", "Water")
     pv = rh / 100. * PropsSI("P", "T", ta, "Q", 0, "Water")
@@ -53,6 +54,7 @@ def thermodynamics(trial, *, consistent, argon=False):
         temperature_dependent_phase_enthalpy=True, equilibrium_argon_condensation=argon,
         conservative_establishment="entrained_mass", radial_points=41,
         consistent_phase_ambient=consistent,
+        water_ice_property_model=water_ice_property_model,
     )
 
 
@@ -71,7 +73,17 @@ def replay(field, trial):
     stored = entry.get("downstream")
     if stored is None:
         return None, {"status": "missing_stored_trajectory"}
-    thermo = thermodynamics(trial, consistent=closure == "consistent_explicit_ideal_v1")
+    # Frozen fields created before the water-ice property correction retain
+    # their declared historical phase table for exact replay. New fields must
+    # record the current model explicitly rather than silently inheriting it.
+    water_ice_model = field.get(
+        "water_ice_property_model", "legacy_pre_murphy_koop_v1"
+    )
+    thermo = thermodynamics(
+        trial,
+        consistent=closure == "consistent_explicit_ideal_v1",
+        water_ice_property_model=water_ice_model,
+    )
     src = thermo.source
     jp, _ = hydrogen_gas_jet(
         rate=src.fuel_mass_flow, diameter=src.diameter, velocity=src.velocity,

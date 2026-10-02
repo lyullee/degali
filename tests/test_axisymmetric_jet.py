@@ -26,6 +26,7 @@ from degali.lh2 import (
 
 def model(
     *, hydrogen_nonideal_volume_correction: bool = False,
+    hydrogen_nonideal_volume_strict: bool = False,
 ) -> ConservedGaussianJet:
     source = AxisymmetricJetSource(
         diameter=9.81128e-4,
@@ -44,7 +45,42 @@ def model(
         ambient_heat_capacity=1006.2,
         radial_points=81,
         hydrogen_nonideal_volume_correction=hydrogen_nonideal_volume_correction,
+        hydrogen_nonideal_volume_strict=hydrogen_nonideal_volume_strict,
     )
+
+
+def test_water_ice_equilibrium_uses_murphy_koop_in_its_published_domain():
+    temperature = 200.0
+    expected = math.exp(
+        9.550426 - 5723.265 / temperature + 3.53068 * math.log(temperature)
+        - 0.00728332 * temperature
+    )
+    assert axisymmetric_jet._water_ice_saturation_pressure(temperature) == pytest.approx(
+        expected, rel=1e-14
+    )
+    # Equation 7 has the ice--vapour triple-point value to the displayed
+    # precision; use a public thermodynamic reference rather than the old
+    # untraceable exponential fit.
+    assert axisymmetric_jet._water_ice_saturation_pressure(273.16) == pytest.approx(
+        611.657, rel=0.003
+    )
+
+
+def test_water_ice_low_temperature_continuation_is_positive_and_continuous():
+    at_boundary = axisymmetric_jet._water_ice_saturation_pressure(110.0)
+    just_below = axisymmetric_jet._water_ice_saturation_pressure(109.999)
+    low = axisymmetric_jet._water_ice_saturation_pressure(30.0)
+    assert 0.0 < low < just_below < at_boundary
+    assert just_below == pytest.approx(at_boundary, rel=2.0e-4)
+    assert axisymmetric_jet._water_ice_sublimation_enthalpy(30.0) == pytest.approx(
+        axisymmetric_jet._water_ice_sublimation_enthalpy(14.1), rel=1e-14
+    )
+
+
+def test_water_condensate_uses_ice_not_liquid_density_below_triple_point():
+    table = axisymmetric_jet._air_phase_property_table()
+    below = np.flatnonzero(table["temperature"] < 273.16)
+    assert np.all(table["water_density"][below] == pytest.approx(916.7094922))
 
 
 def test_plug_to_gaussian_establishment_is_physical():
@@ -115,6 +151,33 @@ def test_nonideal_volume_correction_ignored_when_disabled(monkeypatch):
     density = 1.1
     fraction = 0.4
     _ = jet._temperature_from_density(density, fraction)
+
+
+def test_strict_nonideal_volume_screen_refuses_hidden_ideal_fallback(monkeypatch):
+    def unavailable(*_args, **_kwargs):
+        raise ValueError("not a stable pure gas")
+
+    monkeypatch.setattr(axisymmetric_jet, "hydrogen_gas_departure", unavailable)
+    jet = model(
+        hydrogen_nonideal_volume_correction=True,
+        hydrogen_nonideal_volume_strict=True,
+    )
+    with pytest.raises(ValueError, match="outside its stable-gas domain"):
+        jet._density_from_temperature(40.0, 0.8)
+
+
+def test_strict_nonideal_volume_screen_requires_the_opt_in_correction():
+    with pytest.raises(ValueError, match="requires the correction"):
+        model(hydrogen_nonideal_volume_strict=True)
+
+
+def test_strict_nonideal_volume_screen_covers_the_cryogenic_jet_fixture():
+    jet = model(
+        hydrogen_nonideal_volume_correction=True,
+        hydrogen_nonideal_volume_strict=True,
+    )
+    _distance, state = jet.established_initial_state()
+    assert 40.0 < jet.centreline_temperature(state) < 60.0
 
 
 def test_initial_entrainment_heating_closes_published_plug_balances():
@@ -566,7 +629,12 @@ def test_humid_frost_adds_warming_without_breaking_flux_conservation():
     result = humid.solve(
         maximum_distance=0.04,
         maximum_step=0.002,
-        relative_tolerance=5.0e-6,
+        # The fifth flux is reconstructed from the nonlinear humid-phase
+        # lookup.  A 5e-6 state tolerance can accumulate a 3.8e-4 flux
+        # drift over this short path, which is larger than the 2e-4
+        # conservation criterion below.  This is a numerical resolution
+        # requirement, not a physical tuning parameter.
+        relative_tolerance=1.0e-6,
         method="LSODA",
     )
     assert result.species_flux[-1] == pytest.approx(
@@ -839,7 +907,10 @@ def test_public_lh2_research_path_uses_the_accepted_configuration():
     assert result.model.hydrogen_enthalpy_species == "Hydrogen"
     assert result.model.ambient_absolute_humidity == 0.0
     assert result.conservative
-    assert not result.warnings
+    assert any("complete N2/O2 mixture thermodynamic closure" in warning
+               for warning in result.warnings)
+    assert "bound" in result.notes["configuration"]
+    assert result.notes["N2/O2 phase scope"] != "uncondensed_bulk_air"
     assert "conservation screen         : pass" in result.report()
 
 

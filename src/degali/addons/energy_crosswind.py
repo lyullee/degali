@@ -85,6 +85,8 @@ class IndependentEnergyCrosswind:
         thermal_relaxation_rate: float = 0.0,
         phase_transition_lag_rate: float = 0.0,
         turbulence_heat_exchange_rate: float = 0.0,
+        ground_heat_transfer_coefficient_w_m2_k: float = 0.0,
+        ground_surface_temperature_k: float | None = None,
     ):
         if quadrature_points < 8:
             raise ValueError("crosswind quadrature requires at least eight points")
@@ -110,6 +112,28 @@ class IndependentEnergyCrosswind:
                 "turbulence heat exchange rate must be a finite non-negative "
                 "number"
             )
+        if (
+            not np.isfinite(ground_heat_transfer_coefficient_w_m2_k)
+            or ground_heat_transfer_coefficient_w_m2_k < 0.0
+        ):
+            raise ValueError(
+                "ground heat-transfer coefficient must be finite and "
+                "non-negative"
+            )
+        if ground_surface_temperature_k is not None and (
+            not np.isfinite(ground_surface_temperature_k)
+            or ground_surface_temperature_k <= 0.0
+        ):
+            raise ValueError(
+                "ground surface temperature must be finite and positive"
+            )
+        if (
+            ground_heat_transfer_coefficient_w_m2_k > 0.0
+            and ground_surface_temperature_k is None
+        ):
+            raise ValueError(
+                "positive ground heat transfer requires a surface temperature"
+            )
         self.jetplume = jetplume
         self.thermodynamics = thermodynamics
         self.th = jetplume.th
@@ -124,6 +148,13 @@ class IndependentEnergyCrosswind:
         self.phase_transition_lag_rate = float(phase_transition_lag_rate)
         self.turbulence_heat_exchange_rate = float(
             turbulence_heat_exchange_rate
+        )
+        self.ground_heat_transfer_coefficient_w_m2_k = float(
+            ground_heat_transfer_coefficient_w_m2_k
+        )
+        self.ground_surface_temperature_k = (
+            None if ground_surface_temperature_k is None
+            else float(ground_surface_temperature_k)
         )
         self._quadrature_cache: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
@@ -516,6 +547,27 @@ class IndependentEnergyCrosswind:
             thermal_deficit * transfer_scale
         )
 
+    def ground_heat_source(self, state: np.ndarray) -> float:
+        """Return fixed-boundary ground heat input per trajectory metre.
+
+        This is an opt-in research boundary, not a fitted Test 6 correction.
+        The supplied coefficient has units W/(m2 K); multiplying its positive
+        temperature difference by the geometric contact chord gives W/m. A
+        zero coefficient is the adiabatic bound. As in legacy DEGADIS surface
+        exchange, a colder surface is not allowed to cool the cloud.
+        """
+        coefficient = self.ground_heat_transfer_coefficient_w_m2_k
+        surface_temperature = self.ground_surface_temperature_k
+        if coefficient <= 0.0 or surface_temperature is None:
+            return 0.0
+        ground_width = self._geometry(state)[4]
+        if ground_width <= 0.0:
+            return 0.0
+        temperature_difference = max(
+            surface_temperature - self._mean_temperature(state), 0.0
+        )
+        return coefficient * temperature_difference * ground_width
+
     def houf_velocity_width(self, state: np.ndarray) -> float:
         """Return HyRAM's velocity e-folding width for an elliptic section.
 
@@ -731,6 +783,7 @@ class IndependentEnergyCrosswind:
         include_thermal_relaxation: bool = False,
         include_phase_transition: bool = False,
         include_turbulent_heat_exchange: bool = False,
+        include_ground_heat_transfer: bool = False,
     ) -> np.ndarray:
         """Mass, species, vector-momentum and energy sources per metre.
 
@@ -740,7 +793,8 @@ class IndependentEnergyCrosswind:
         relaxation term for thermal equilibration.
         `include_phase_transition` adds finite-rate phase-equilibrium relaxation.
         `include_turbulent_heat_exchange` adds a boundary-like turbulent heat
-        exchange term.
+        exchange term. `include_ground_heat_transfer` adds only the declared
+        fixed-temperature contact boundary configured on this model.
         """
         rho_c, _fraction_c, sysz, theta, uc, _x, _z = self._physical(state)
         (
@@ -847,6 +901,8 @@ class IndependentEnergyCrosswind:
             energy_source += self._turbulent_heat_exchange_source(
                 state, mass_source
             )
+        if include_ground_heat_transfer:
+            energy_source += self.ground_heat_source(state)
         return np.array([
             mass_source,
             0.0,
@@ -1049,6 +1105,7 @@ class IndependentEnergyCrosswind:
         include_thermal_relaxation: bool = False,
         include_phase_transition: bool = False,
         include_turbulent_heat_exchange: bool = False,
+        include_ground_heat_transfer: bool = False,
     ) -> np.ndarray:
         """Solve the five conservative balances and two trajectory equations."""
         state = np.asarray(state, dtype=float)
@@ -1061,6 +1118,7 @@ class IndependentEnergyCrosswind:
             include_thermal_relaxation=include_thermal_relaxation,
             include_phase_transition=include_phase_transition,
             include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+            include_ground_heat_transfer=include_ground_heat_transfer,
         )
         column_scales = np.maximum(
             np.abs(state[:5]), np.array([1.0, 0.1, 1.0e-3, 1.0, 1.0])
@@ -1126,6 +1184,7 @@ class IndependentEnergyCrosswind:
         include_thermal_relaxation: bool = False,
         include_phase_transition: bool = False,
         include_turbulent_heat_exchange: bool = False,
+        include_ground_heat_transfer: bool = False,
     ) -> IndependentEnergyJetResult:
         """Integrate the seven-state plume over additional arc length.
 
@@ -1146,6 +1205,7 @@ class IndependentEnergyCrosswind:
                 include_thermal_relaxation=include_thermal_relaxation,
                 include_phase_transition=include_phase_transition,
                 include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+                include_ground_heat_transfer=include_ground_heat_transfer,
             )
             fraction = state[E_Y]
             return np.array([
@@ -1188,6 +1248,7 @@ class IndependentEnergyCrosswind:
                     include_thermal_relaxation=include_thermal_relaxation,
                     include_phase_transition=include_phase_transition,
                     include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+                    include_ground_heat_transfer=include_ground_heat_transfer,
                 )
                 path1 = np.array([
                     math.cos(current[E_THETA]),
@@ -1204,6 +1265,7 @@ class IndependentEnergyCrosswind:
                     include_thermal_relaxation=include_thermal_relaxation,
                     include_phase_transition=include_phase_transition,
                     include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+                    include_ground_heat_transfer=include_ground_heat_transfer,
                 )
                 path2 = np.array([
                     math.cos(state2[E_THETA]),
@@ -1220,6 +1282,7 @@ class IndependentEnergyCrosswind:
                     include_thermal_relaxation=include_thermal_relaxation,
                     include_phase_transition=include_phase_transition,
                     include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+                    include_ground_heat_transfer=include_ground_heat_transfer,
                 )
                 path3 = np.array([
                     math.cos(state3[E_THETA]),
@@ -1236,6 +1299,7 @@ class IndependentEnergyCrosswind:
                     include_thermal_relaxation=include_thermal_relaxation,
                     include_phase_transition=include_phase_transition,
                     include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+                    include_ground_heat_transfer=include_ground_heat_transfer,
                 )
                 path4 = np.array([
                     math.cos(state4[E_THETA]),
@@ -1310,6 +1374,7 @@ class IndependentEnergyCrosswind:
                 include_thermal_relaxation=include_thermal_relaxation,
                 include_phase_transition=include_phase_transition,
                 include_turbulent_heat_exchange=include_turbulent_heat_exchange,
+                include_ground_heat_transfer=include_ground_heat_transfer,
             ) for state in states
         ])
         if cumulative is None:

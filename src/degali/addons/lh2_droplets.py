@@ -32,6 +32,7 @@ class FlashingHydrogenDropletSource:
     upstream_velocity: float
     ambient_pressure: float
     postflash_temperature: float
+    postflash_specific_enthalpy: float
     postflash_quality: float
     postflash_density: float
     postflash_velocity: float
@@ -181,6 +182,21 @@ def flashing_hydrogen_droplet_source(
         (postflash_enthalpy - liquid_enthalpy)
         / (vapour_enthalpy - liquid_enthalpy)
     )
+    if (
+        raw_quality < -1.0e-10
+        and upstream_temperature >= float(PropsSI("Tcrit", hydrogen_species))
+    ):
+        # For an initially supercritical gas, a prescribed low mass flow
+        # while retaining full geometric pressure thrust can demand an
+        # atmospheric state below saturated liquid H2. That is not a colder
+        # valid gas-source result to clip into existence: the supplied flow,
+        # effective throat area and momentum boundary are incompatible with
+        # this one-velocity flash construction. The established subcritical
+        # LH2 path retains its explicit liquid continuation.
+        raise ValueError(
+            "post-flash energy lies below saturated liquid hydrogen; "
+            "supply a consistent mass-flow/throat-momentum boundary"
+        )
     postflash_quality = min(max(raw_quality, 0.0), 1.0)
     if 0.0 < raw_quality < 1.0:
         postflash_temperature = float(PropsSI(
@@ -279,6 +295,7 @@ def flashing_hydrogen_droplet_source(
         upstream_velocity=upstream_velocity,
         ambient_pressure=ambient_pressure,
         postflash_temperature=postflash_temperature,
+        postflash_specific_enthalpy=postflash_enthalpy,
         postflash_quality=postflash_quality,
         postflash_density=postflash_density,
         postflash_velocity=postflash_velocity,
@@ -320,19 +337,17 @@ def homogeneous_equilibrium_hydrogen_source(
     The post-flash plane is reconstructed first, including its residual
     liquid.  The existing species-resolved N2/O2 energy balance then finds
     the amount of ambient air required to finish H2 evaporation while total
-    momentum and kinetic energy are retained.  The reported formation length
-    is the published constant-entrainment integral estimate; no receptor data
-    or fitted evaporation distance enters this construction.
+    momentum and kinetic energy are retained.  Its endpoint carries an
+    explicit N2/O2 mixed-phase scope: at LH2 temperatures the separate-pure-
+    component condensate ledger is a bound, not a complete mixture EOS. The
+    reported formation length is the published constant-entrainment integral
+    estimate; no receptor data or fitted evaporation distance enters this
+    construction.
 
     Individual droplet heat-transfer resistance is assumed negligible here.
     Consequently this is a fastest homogeneous-equilibrium bound, not the
     later two-temperature finite-rate model.
     """
-    from CoolProp.CoolProp import PropsSI
-
-    from .axisymmetric_jet import AxisymmetricJetSource, SourceEnthalpyBoundary
-    from .cryogenic_air import multiphase_hydrogen_source_plane
-
     postflash = flashing_hydrogen_droplet_source(
         mass_flow=mass_flow,
         orifice_diameter=orifice_diameter,
@@ -344,30 +359,78 @@ def homogeneous_equilibrium_hydrogen_source(
         droplet_size_coefficient=droplet_size_coefficient,
         hydrogen_species=hydrogen_species,
     )
+    return homogeneous_equilibrium_hydrogen_source_from_postflash(
+        postflash,
+        ambient_temperature=ambient_temperature,
+        ambient_pressure=ambient_pressure,
+        theta=theta,
+        x=x,
+        y=y,
+    )
+
+
+def homogeneous_equilibrium_hydrogen_source_from_postflash(
+    postflash: FlashingHydrogenDropletSource,
+    *,
+    ambient_temperature: float = 298.15,
+    ambient_pressure: float = 101325.0,
+    theta: float = 0.0,
+    x: float = 0.0,
+    y: float = 0.0,
+) -> HomogeneousEquilibriumHydrogenSource:
+    """Finish H2 evaporation from an explicit post-flash liquid/vapour plane.
+
+    Unlike :func:`homogeneous_equilibrium_hydrogen_source`, this accepts a
+    plane reconstructed from any pure-H2 P/T state, including a supercritical
+    compressed-gas reservoir.  The source energy is reconstructed from the
+    recorded post-flash quality and velocity, so pressure work is counted once
+    and no saturated-liquid storage state is invented.  It remains the fast,
+    common-velocity evaporation bound; it does not infer a droplet size or a
+    finite phase-transfer time.
+    """
+    from CoolProp.CoolProp import PropsSI
+
+    from .axisymmetric_jet import AxisymmetricJetSource, SourceEnthalpyBoundary
+    from .cryogenic_air import multiphase_hydrogen_source_plane
+
+    if ambient_temperature <= 0.0 or ambient_pressure <= 0.0:
+        raise ValueError("ambient temperature and pressure must be positive")
+    species = postflash.hydrogen_species
+    # Retain the flash-plane enthalpy itself.  Reconstructing it from a
+    # saturated quality discards the sensible subcooling whenever a liquid
+    # post-flash state is below saturation at the ambient pressure.
+    postflash_h = postflash.postflash_specific_enthalpy
+    reference_h = float(PropsSI(
+        "H", "T|gas", ambient_temperature, "P", ambient_pressure, species
+    ))
+    incoming_energy = (
+        postflash_h - reference_h + 0.5 * postflash.postflash_velocity**2
+    )
     plane = multiphase_hydrogen_source_plane(
-        hydrogen_flow=mass_flow,
-        orifice_diameter=orifice_diameter,
-        orifice_density=postflash.upstream_density,
-        storage_temperature=upstream_temperature,
+        hydrogen_flow=postflash.mass_flow,
+        orifice_diameter=postflash.postflash_diameter,
+        orifice_density=postflash.postflash_density,
+        storage_temperature=postflash.upstream_temperature,
         ambient_temperature=ambient_temperature,
         ambient_pressure=ambient_pressure,
         specific_momentum=postflash.postflash_velocity,
         include_kinetic_energy=True,
         incoming_specific_kinetic_energy=0.5 * postflash.upstream_velocity**2,
-        storage_pressure=upstream_pressure,
-        hydrogen_species=hydrogen_species,
+        incoming_total_specific_energy=incoming_energy,
+        storage_pressure=postflash.upstream_pressure,
+        hydrogen_species=species,
     )
     total_flow = plane.total_flow
     endpoint = plane.endpoint
     boundary = SourceEnthalpyBoundary(
         specific_enthalpy=(
             endpoint.outgoing_specific_energy - endpoint.specific_kinetic_energy
-        ) * mass_flow / total_flow,
+        ) * postflash.mass_flow / total_flow,
         ambient_temperature=ambient_temperature,
-        hydrogen_species=hydrogen_species,
+        hydrogen_species=species,
         hydrogen_reference_enthalpy=float(PropsSI(
             "H", "T|gas", ambient_temperature, "P", ambient_pressure,
-            hydrogen_species,
+            species,
         )),
     )
     source = AxisymmetricJetSource(
@@ -375,7 +438,7 @@ def homogeneous_equilibrium_hydrogen_source(
         velocity=plane.velocity,
         density=plane.density,
         temperature=plane.endpoint.temperature,
-        mass_fraction=mass_flow / total_flow,
+        mass_fraction=postflash.mass_flow / total_flow,
         theta=theta,
         x=x + plane.formation_distance * math.cos(theta),
         y=y + plane.formation_distance * math.sin(theta),
@@ -386,8 +449,8 @@ def homogeneous_equilibrium_hydrogen_source(
         postflash=postflash,
         phase_plane=plane,
         source=source,
-        hydrogen_mass_residual=abs(source.fuel_mass_flow - mass_flow)
-        / mass_flow,
+        hydrogen_mass_residual=abs(source.fuel_mass_flow - postflash.mass_flow)
+        / postflash.mass_flow,
         total_mass_residual=abs(source.mass_flow - total_flow) / total_flow,
         momentum_residual=abs(source_momentum - plane.momentum_flux)
         / max(abs(plane.momentum_flux), 1.0),

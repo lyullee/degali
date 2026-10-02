@@ -123,7 +123,11 @@ class EnergyConservingNotionalNozzle:
     def admissible(self) -> bool:
         """Whether measured flow and atmospheric energy state are physical."""
         return (
-            0.0 < self.discharge_coefficient <= 1.0
+            # ``mass_flow = throat.mass_flux * area`` is the exact ideal
+            # boundary, but the independent bounded throat optimisation can
+            # leave a few 1e-12 above one.  This tolerance accepts roundoff,
+            # not a meaningful over-unity discharge coefficient.
+            0.0 < self.discharge_coefficient <= 1.0 + 1.0e-9
             and self.temperature is not None
             and self.density is not None
             and self.diameter is not None
@@ -163,6 +167,7 @@ def expand_measured_throat_to_ambient(
     *, fluid: str, mass_flow: float, throat_diameter: float,
     throat_pressure: float, throat_temperature: float,
     throat_density: float, throat_velocity: float,
+    throat_enthalpy: float | None = None,
     ambient_pressure: float = ATM_TO_PA,
 ) -> MeasuredThroatExpansion:
     """Apply HyRAM+ equations 47--51 to a supplied throat plane.
@@ -170,7 +175,9 @@ def expand_measured_throat_to_ambient(
     Mass fixes the atmospheric area, while throat advective momentum plus
     positive pressure thrust fixes velocity.  Static enthalpy at the
     atmospheric plane follows from conservation of total specific energy,
-    ``h + u**2/2``.  No storage-state or ideal choking calculation is added.
+    ``h + u**2/2``.  ``throat_enthalpy`` may carry an independently resolved
+    throat state through a saturation-line ``T, P`` ambiguity.  No storage-
+    state or ideal choking calculation is added.
     """
     from CoolProp.CoolProp import PropsSI
 
@@ -195,9 +202,12 @@ def expand_measured_throat_to_ambient(
     momentum_flux = advective_momentum + pressure_thrust
     velocity = momentum_flux / mass_flow
 
-    throat_enthalpy = float(PropsSI(
-        "H", "T", throat_temperature, "P", throat_pressure, fluid
-    ))
+    if throat_enthalpy is None:
+        throat_enthalpy = float(PropsSI(
+            "H", "T", throat_temperature, "P", throat_pressure, fluid
+        ))
+    elif not math.isfinite(throat_enthalpy):
+        raise ValueError("throat_enthalpy must be finite when supplied")
     total_specific_energy = throat_enthalpy + 0.5 * throat_velocity**2
     enthalpy = total_specific_energy - 0.5 * velocity**2
     temperature = float(PropsSI(
@@ -242,6 +252,7 @@ def isentropic_throat(
     *, fluid: str, storage_temperature: float,
     ambient_pressure: float = ATM_TO_PA,
     storage_pressure: float | None = None,
+    allow_supercritical_gas: bool = False,
 ) -> IsentropicThroat:
     """Find the homogeneous-equilibrium critical state.
 
@@ -253,6 +264,13 @@ def isentropic_throat(
     pressure maximises ``rho*u`` between ambient and storage pressure,
     exactly as in HyRAM+ equations 44--45.  Optimising log-pressure avoids
     loss of resolution near the lower bound.
+
+    A temperature above the fluid critical point cannot define a saturated
+    storage state. It is therefore rejected by default, preserving the
+    liquid-source contract. Set ``allow_supercritical_gas=True`` *and* supply
+    a measured storage pressure to apply the same one-dimensional, pure-fluid
+    isentropic construction to a compressed gas. This does not select a
+    discharge coefficient, model a valve, or make a mixture EOS.
     """
     from CoolProp.CoolProp import PropsSI
     from scipy.optimize import minimize_scalar
@@ -260,9 +278,12 @@ def isentropic_throat(
     if storage_temperature <= 0.0 or ambient_pressure <= 0.0:
         raise ValueError("temperature and pressure must be positive")
     critical_temperature = float(PropsSI("Tcrit", fluid))
-    if storage_temperature >= critical_temperature:
+    if storage_temperature >= critical_temperature and (
+        not allow_supercritical_gas or storage_pressure is None
+    ):
         raise ValueError(
-            f"{fluid} is supercritical at {storage_temperature:.1f} K"
+            f"{fluid} is supercritical at {storage_temperature:.1f} K; "
+            "supply storage_pressure and allow_supercritical_gas=True"
         )
     if storage_pressure is None:
         storage_pressure = float(
@@ -322,6 +343,7 @@ def energy_conserving_notional_nozzle(
     *, fluid: str, storage_temperature: float, mass_flow: float,
     orifice_diameter: float, ambient_pressure: float = ATM_TO_PA,
     storage_pressure: float | None = None,
+    allow_supercritical_gas: bool = False,
 ) -> EnergyConservingNotionalNozzle:
     """Expand the HEM throat to ambient pressure without creating energy.
 
@@ -340,6 +362,7 @@ def energy_conserving_notional_nozzle(
         fluid=fluid, storage_temperature=storage_temperature,
         ambient_pressure=ambient_pressure,
         storage_pressure=storage_pressure,
+        allow_supercritical_gas=allow_supercritical_gas,
     )
     area = PI * orifice_diameter**2 / 4.0
     discharge_coefficient = mass_flow / max(throat.mass_flux * area, 1.0e-30)

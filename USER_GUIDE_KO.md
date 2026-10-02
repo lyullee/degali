@@ -158,6 +158,13 @@ print(pool.report())
 따라서 `rate`와 `pool_diameter`는 외부 누출원 모델 또는 보수적 공학 가정으로
 먼저 산정해야 한다.
 
+증발 이력이 있으면 `assess_pool_history()`가 준정상 스냅샷을 유지한다.
+수신점과 사용자가 선언한 응답시간을 알고 있는 경우
+`response_time_s=...`를 추가하면 인과적 1차 관측 응답 커널을 적용한
+`receptor_transient_mole_fraction`도 계산한다. 이는 저차 연구용 근사이며
+비정상 CFD나 검증된 puff 모델이 아니고, 응답시간을 데이터에서 자동 피팅하지
+않는다.
+
 ## 5. 결과 해석
 
 `Assessment`의 주요 속성은 다음과 같다.
@@ -172,6 +179,31 @@ print(pool.report())
 | `trajectory` | `[x, z, 중심선 몰분율]` 형식의 NumPy 배열 |
 | `warnings` | 검증범위 이탈 또는 물리적 적용성 경고 목록 |
 | `notes` | 사용한 원천·모델 경로·플래싱 후 수소 질량분율 |
+
+`result.screening_scope`는 `qualified`, `conditional`, `out_of_scope` 중
+하나다. 외삽값을 자동으로 차단해야 하는 운영 경로에서는
+`strict_scope=True`를 전달한다. 검증범위 경고가 발생하면
+`ApplicabilityError`가 발생한다. 기본 경고 모드는 연구·민감도 분석용이며
+인허가나 설계 승인 판단을 의미하지 않는다.
+
+### 5.1.1 다른 모델과의 비교
+
+HyRAM·PHAST·EFFECTS 또는 CFD의 독립 계산값이 있을 때는
+`degali.validation.compare_models`를 사용한다. `ComparisonCase`가 source,
+풍속·풍향, 방출 높이, 센서 연산자, 평균시간, 상평형 폐쇄, 형상을 함께 기록한다.
+조건이 다르거나 관측값에 맞춰 피팅된 결과는 진단 통계는 계산하지만 우열 순위에서는
+자동 제외된다. 서로 다른 실행조건의 수치로 “일반적으로 더 정확하다”는 주장을 만드는
+것을 막는 비교 프로토콜이다.
+
+단일 중심선 관측점의 원인 분해에는 `assess_observation_envelope()`를 사용한다.
+사용자가 선언한 source 질량률·풍속 조합을 모두 계산하고, 관측값의 지정 배수 안에
+들어오는 모든 조합을 반환한다. 여러 조합이 남으면 결과를 식별불능으로 표시하며,
+보정계수를 피팅하거나 하나를 임의로 선택하지 않는다.
+센서 높이값이나 arc 최대값은 별도의 검증된 관측 연산자가 필요하며 중심선 값으로
+자동 대체하지 않는다.
+지정한 마스트 좌표 `(x, y, z)`에서 실제 연산자를 적용하려면
+`project_lh2_jet_to_sensors(points_m=[...])`를 사용한다. Gaussian 수직·횡방향
+프로파일로 농도와 온도를 직접 계산하며, 계산 궤적 밖 점은 `nan`으로 남긴다.
 
 `nan`은 보통 계산 실패가 아니라, 지정한 적분 범위 안에서 해당 농도 교차가
 발견되지 않았다는 뜻이다. 이때 무조건 `max_distance`만 늘리지 말고 궤적,
@@ -274,6 +306,25 @@ with open("wind_sensitivity.csv", "w", newline="", encoding="utf-8") as f:
 시나리오 비교에서는 한 번에 하나의 입력만 바꾸고, 모든 입력·버전·경고를
 결과 파일에 함께 보존하는 것이 좋다.
 
+원천 유량과 풍속의 신뢰 가능한 범위를 직접 넣어 입력 민감도 봉투를
+계산할 수도 있다. DEGALI가 임의의 오차율이나 보정계수를 만들지는 않는다.
+
+```python
+from degali.lh2 import assess_envelope
+
+envelope = assess_envelope(
+    rates=[0.25, 0.285, 0.32],
+    winds=[2.3, 2.5, 2.7],
+    height=0.50, orifice=0.0254, storage_pressure=6.0,
+    max_distance=6.0,
+)
+print(envelope.distance_to_lfl_range)
+print(envelope.screening_scope, envelope.warnings)
+```
+
+이는 FFI Test 6에 맞춘 피팅이나 신뢰구간이 아니라, 사용자가 선언한
+입력 범위의 결정론적 민감도 계산이다.
+
 ## 7. 현재 검증범위와 경고
 
 공개 `assess()` 경로가 코드에서 확인하는 범위는 다음과 같다.
@@ -290,12 +341,54 @@ with open("wind_sensitivity.csv", "w", newline="", encoding="utf-8") as f:
 
 다음 조건은 현재 단독 설계 판단 범위가 아니다.
 
-- 장애물, 건물 후류 및 복잡 지형
+- 장애물, 건물 후류 및 복잡 지형(아래 기하 화면은 중심 궤적 접촉만
+  검출하며, 후류 모델은 아니다)
 - 실내 또는 부분 밀폐 공간
-- 임의 방향, 강한 횡풍 또는 하향 충돌 제트
+- 기본 `assess()` 경로에서의 임의 방향·강한 횡풍·하향 충돌 제트. 수평
+  방출의 yaw와 풍향을 계산하는 별도
+  `run_lh2_yawed_crosswind_research()` 경로는 추가되었지만, 연구 전용이며
+  설계 정량값으로 검증된 경로가 아니다.
 - 독립 풀 확장·기화율 계산
 - 임의 설비 조건 전체에 대한 인증된 사고결과 해석
 - 점화, 화염, 복사열, 폭발 과압 계산
+
+### 7.1 연구용 시설 기하 화면
+
+별도로 계산된 3차원 중심 궤적에 대해, 선택형 기하 화면은 **자유 플룸**
+적분 결과가 더 이상 적용되지 않는 지점을 찾는다. 좌표는 전역 `(x, y, z)`
+미터다. 풍향 좌표계의 각도는 전역 `+x`축에서 반시계 방향으로 잰 라디안
+**향하는(to)** 방향이며, 기상학적 불어오는(from) 방향이 아니다.
+
+```python
+from degali.addons import (
+    AxisAlignedCuboid, TransverseWall, WindFrame, screen_trajectory,
+)
+
+path = [(0.0, 0.0, 1.0), (4.0, 0.0, 1.2), (8.0, 0.2, 1.8)]
+obstacles = [
+    AxisAlignedCuboid(3.0, 4.5, -0.8, 0.8, 0.0, 3.0, label="compressor"),
+    TransverseWall(WindFrame(direction_rad=0.0), downwind_m=6.0,
+                   base_height_m=0.0, height_m=2.5, half_width_m=None),
+]
+screen = screen_trajectory(path, obstacles)
+if not screen.free_plume_prediction_applicable:
+    first = screen.encounters[0]
+    print(first.obstacle_label, first.entry_point_m)
+    # 이 지점 이후 자유 플룸 농도장은 보고하지 않는다.
+    assert screen.free_plume_applicable_through(first.entry_arc_length_m - 1e-6)
+```
+
+`half_width_m=None`은 횡방향 무한 방벽의 이상화다. 이때 반환되는
+`required_overflight_height_m`는 연속적인 중심 경로가 넘기 위해 필요한 최소
+기하학 높이일 뿐, 플룸 상승 예측값이 아니다. 유한 폭 방벽은 위로 넘거나
+양옆으로 우회할 수 있으므로 화면은 어느 경로도 선택하지 않는다. 선택형
+`YawedCrosswind` 계산 뒤에는 `YawedTrajectory.obstacle_screen(obstacles)`로
+동일한 검사를 할 수 있다.
+
+이 화면은 후류 계수, 우회 유량 비율, 벽 열전달, 반사 농도장 또는
+장애물 보정 농도를 절대 적용하지 않는다. 중심선이 비어 있어도 유한한
+가우시안 플룸 외곽이 구조물을 피한다는 뜻은 아니다. 건물·방벽 하류 농도는
+장애물 해상 및 별도 검증을 갖춘 해석으로 평가해야 한다.
 
 ## 8. 기존 DEGADIS 입력 덱 사용
 
@@ -478,8 +571,8 @@ import degali
 print(degali.__version__)
 ```
 
-DEGALI 0.1.0 버전 DOI는
-[`10.5281/zenodo.22646259`](https://doi.org/10.5281/zenodo.22646259)이며,
+DEGALI 0.2.0 버전 DOI는
+[`10.5281/zenodo.23105451`](https://doi.org/10.5281/zenodo.23105451)이며,
 모든 버전을 묶는 개념 DOI는
 [`10.5281/zenodo.22646258`](https://doi.org/10.5281/zenodo.22646258)이다.
 
@@ -496,3 +589,138 @@ DEGALI 0.1.0 버전 DOI는
 
 오류 보고 시 운영체제, Python 버전, DEGALI 버전, 최소 재현 코드, 전체 오류
 메시지를 포함하되 제3자 원시 실험 데이터는 GitHub 이슈에 첨부하지 않는다.
+# 유한 방출 제트–플룸–퍼프 실행
+
+유한 시간 동안 방출되는 수평 LH2 제트는 연구 API 한 번으로 근접장,
+횡풍 플룸, 정확한 방출 종료 전환, 3차원 퍼프 및 고정 수용점 이력까지
+계산할 수 있습니다. 모든 입력은 SI 단위입니다.
+
+```python
+from degali.addons.axisymmetric_jet import AxisymmetricJetSource
+from degali.lh2 import run_lh2_finite_release_research
+
+source = AxisymmetricJetSource(
+    diameter=0.001,
+    velocity=500.0,
+    density=0.5,
+    temperature=45.0,
+    theta=0.0,
+    y=0.5,
+)
+
+result = run_lh2_finite_release_research(
+    source,
+    source_duration_s=5.0,
+    puff_duration_s=60.0,
+    wind=2.5,
+    wind_angle=0.0,       # +x 방향으로 부는 바람, rad
+    release_angle=0.0,    # +x 방향 수평 방출, rad
+)
+
+print(result.report())
+trace = result.receptor_trace((30.0, 0.0, 0.5))
+print(trace.peak_mole_fraction, trace.peak_time_s)
+```
+
+`trace.time_s`는 방출 시작을 0초로 하는 절대 시각입니다. 정상 플룸은
+물질 이동 시간이 `source_duration_s`에 도달하는 단면까지만 계산되고,
+그 이후에는 정상 플룸을 외삽하지 않고 native puff가 계산합니다.
+
+현재 puff 경로는 질량·H2 보존 및 수치 회귀시험을 통과했지만 독립적인
+유한 LH2 현장 농도 검증은 아직 완료되지 않았으므로 결과에는 연구 경고가
+유지됩니다. 측정 풍장이 방출 시작부터 전환 시점까지 포함되면 고수준 함수가
+`assess_steady_wind_applicability`를 자동 실행합니다. 한계를 넘으면 결과는
+조건부가 되고, `strict_scope=True`이면 정상 플룸 계산을 시작하기 전에
+`ApplicabilityError`를 냅니다.
+
+전환 이후 puff에는 측정 풍장을 직접 줄 수 있습니다. `WindHistory`의 시간은
+방출 시작 기준 절대시각이며, 기록이 `source_duration_s`부터 puff 종료시각까지
+이어져야 합니다.
+
+```python
+from degali.addons import WindHistory
+
+measured_wind = WindHistory(
+    time_s=[0.0, 5.0, 10.0, 20.0, 65.0],
+    speed_m_s=[2.5, 2.5, 3.0, 2.0, 2.0],
+    direction_from_deg=[270.0, 270.0, 250.0, 220.0, 220.0],
+)
+
+result = run_lh2_finite_release_research(
+    source,
+    source_duration_s=5.0,
+    puff_duration_s=60.0,
+    wind=2.5,
+    puff_wind_history=measured_wind,
+)
+```
+
+풍향은 기상학적 `from` 방위각으로 입력하고 내부에서는 동·북 벡터로
+변환해 보간합니다. 관측 시각 경계에서 적분 step을 정확히 분할합니다.
+전환 전 plume은 아직 `wind`와 `wind_angle`로 선언한 정상풍을 사용하므로,
+그 구간의 풍향 변화가 크면 결과는 조건부 연구 결과입니다.
+
+## 플래시 액적–rainout–풀 실행
+
+`flashing_hydrogen_droplet_source()`로 만든 post-flash 입력은
+`run_lh2_rainout_pool_research()`에 바로 전달할 수 있습니다. 이 함수는
+잔류 액적을 크기군별로 횡풍·중력·증발 계산하고, 지면 도달분을 방출과
+동시에 선언된 침적 footprint에 공급합니다. 기본값은 축대칭 얕은층
+방정식으로 풀의 중력 확산과 각 반경 셀의 기판 접촉시간별 증발을 함께
+계산합니다.
+
+```python
+from degali.addons import (
+    DropletClass,
+    SolidSubstrate,
+    flashing_hydrogen_droplet_source,
+)
+from degali.lh2 import run_lh2_rainout_pool_research
+
+flash = flashing_hydrogen_droplet_source(
+    mass_flow=0.285,
+    orifice_diameter=0.006,
+    upstream_temperature=28.2550342766,  # 600 kPa 포화온도
+    upstream_pressure=600000.0,
+    upstream_quality=0.0,
+)
+ground = SolidSubstrate(
+    conductivity_w_m_k=1.4,
+    density_kg_m3=2200.0,
+    heat_capacity_j_kg_k=850.0,
+    initial_temperature_k=293.15,
+    depth_m=0.5,
+)
+
+result = run_lh2_rainout_pool_research(
+    flash,
+    release_duration_s=5.0,
+    post_release_duration_s=60.0,
+    release_position_m=(0.0, 0.0, 1.5),
+    release_azimuth_rad=0.0,
+    release_elevation_rad=0.0,
+    wind_speed_m_s=2.5,
+    wind_to_angle_rad=0.0,
+    evaporation_coefficient_m2_s=1.0e-9,
+    pool_area_m2=1.0,
+    pool_time_step_s=0.1,
+    substrate=ground,
+    droplet_classes=(
+        DropletClass(diameter_m=1.0e-4, mass_fraction=0.25),
+        DropletClass(diameter_m=1.0e-3, mass_fraction=0.75),
+    ),
+)
+print(result.report())
+```
+
+`evaporation_coefficient_m2_s`와 `pool_area_m2`는 누출 조건만으로 유일하게
+정해지지 않으므로 측정값 또는 선택한 상관식 결과를 명시해야 합니다.
+여기서 `pool_area_m2`는 동적 풀의 최종 면적이 아니라 초기 지면 침적
+footprint 면적입니다. 모델이 impact 점 몇 개에서 이 면적을 임의로
+만들어내지는 않습니다. 계산영역 반경·격자·유입 환형을 직접 통제하려면
+`DynamicPoolNumerics`를 `dynamic_pool_numerics=`로 전달하고, 물리적으로
+고정된 방유제 면적을 계산할 때만 `pool_model="fixed"`를 명시합니다.
+짧은 물/얼음 표면 시험처럼 독립적으로 열유속이 알려진 경우에는
+`ConstantHeatFluxSurface`를 사용할 수 있습니다. 기본 증발 운동량 closure는
+제한 검증에 사용된 `zero_radial_momentum_vapor`이며,
+`liquid_velocity_carryoff`는 명시적 구조 민감도 옵션입니다.

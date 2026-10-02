@@ -2,6 +2,18 @@
 
 Date: 2026-09-05
 
+> **Status 2026-09-10:** This is now a contingency specification, not a
+> prerequisite for the next calculation. Public Sandia scalar-fluctuation
+> evidence and a public 5 bar/50 K LES axial-RMS contour support an immediate
+> bounded TKE screen; see
+> [`public-turbulence-evidence-audit.md`](public-turbulence-evidence-audit.md).
+> They do not identify epsilon, so they cannot promote a default closure.
+> **Status 2026-09-15:** The public E3.5 archive catalogue was checked again.
+> It confirms the presence of H2/O2/thermal/weather/video channels and a
+> qualitative condensed-air observation, but lists no particle-size, phase
+> inventory or independent gas/particle-velocity channel.  Priority 2 remains
+> a genuine missing measurement, not an uninspected workbook field.
+
 ## Purpose
 
 The remaining PRESLHY error is excessive buoyancy accumulation between 10D
