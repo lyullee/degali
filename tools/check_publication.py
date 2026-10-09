@@ -63,9 +63,10 @@ def project_version() -> str:
 
 
 def markdown_link_errors(paths: list[pathlib.Path]) -> list[str]:
-    """Return missing local Markdown link targets in the candidate snapshot."""
+    """Return local Markdown links absent from the candidate snapshot."""
 
     errors: list[str] = []
+    published = {path.resolve() for path in paths}
     for path in paths:
         if path.suffix.lower() != ".md":
             continue
@@ -82,7 +83,11 @@ def markdown_link_errors(paths: list[pathlib.Path]) -> list[str]:
             if not target:
                 continue
             candidate = (path.parent / target).resolve()
-            if not candidate.exists():
+            included = candidate in published or (
+                candidate.is_dir()
+                and any(candidate in published_path.parents for published_path in published)
+            )
+            if not included:
                 errors.append(
                     f"broken local Markdown link in {path.relative_to(ROOT).as_posix()}: {target}"
                 )

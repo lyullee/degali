@@ -22,7 +22,7 @@
 | 적용범위 자동 판정 | `FieldApplicability`, operational decision, gate code, refinement/uncertainty/conditional-review gates | blocked/conditional/allowed를 fail-closed로 분리 |
 | 실패안전 출력 | `field-verify`, `field-audit-verify`, nested provenance/inventory/decision checks, exclusive-create artifact writers | 변조·재계산 불일치 회귀 통과; 최신 v14 감사 3종과 Test 4 comparison execution v3를 실제 CLI로 재검증(exit 0) |
 | 외부 채널 결합 경계 | `FieldEvidenceManifest`의 명시적 5채널 선택·SHA·event/clock/operator ID와 파일 재검증, strict validation case linkage | manifest/case drift 차단; `promotion_allowed=false` 유지 |
-| 외부 현장 validation 승격 | [최신 SLABx 감사 v14](../outputs/current-slabx-audit-2026-10-07-v14.json) | **partial**: 16,139개 구조화 파일 중 source-boundary 후보 15개와 수용기 후보 33개를 노출하지만 weather/obstacle/common-clock가 없음. source-rate/wind 및 운전 historian near-miss는 유형별 집계와 `collection_requirements`로 다음 수집 작업만 안내 |
+| 외부 현장 validation 승격 | 최신 SLABx 감사 v14 (`outputs/current-slabx-audit-2026-10-07-v14.json`; 로컬 생성 산출물) | **partial**: 16,139개 구조화 파일 중 source-boundary 후보 15개와 수용기 후보 33개를 노출하지만 weather/obstacle/common-clock가 없음. source-rate/wind 및 운전 historian near-miss는 유형별 집계와 `collection_requirements`로 다음 수집 작업만 안내 |
 
 ## 외부 evidence 판정
 
@@ -41,9 +41,10 @@ event join이나 validation 승격이 아니다. 후보 메모의 `diagnostic_co
 source boundary, 기상 동시성, 장애물 geometry, common clock를 추론하지
 않는다.
 
-검사센터 및 관련 자료의 v14 감사 artifact는
-[`current-support-center-audit-2026-10-07-v14.json`](../outputs/current-support-center-audit-2026-10-07-v14.json)과
-[`current-related-audit-2026-10-07-v14.json`](../outputs/current-related-audit-2026-10-07-v14.json)이다.
+검사센터 및 관련 자료의 v14 감사 artifact는 로컬 생성 산출물인
+`outputs/current-support-center-audit-2026-10-07-v14.json`과
+`outputs/current-related-audit-2026-10-07-v14.json`이다. 이 파일들은
+재생성 가능한 감사 결과이므로 공개 스냅샷에는 포함하지 않는다.
 별도로 확인한 2톤 탱크 GA/P&ID와 TK-1101/TK-1102 계기 도면, 설명자료는
 정적 geometry·벤트 topology·6.5→6.0 bar 운전 시나리오만 제공하며, 특정
 사건의 source-rate·동시 기상·수용기 농도·common clock를 제공하지 않는다.

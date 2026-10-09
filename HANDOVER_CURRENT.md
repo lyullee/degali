@@ -1209,8 +1209,9 @@ Git remote: `https://github.com/lyullee/degali.git`
   새 `deterministic_sensor_envelope`는 각 detector의 peak/final/time-average
   true·indicated extrema를 completed corner에서만 계산하고, 누락/off-plane
   trace는 값 없이 withheld count와 사유를 보존한다. 실제 CLI 실행 결과는
-  [outputs/current-field-screen-sensor-envelope.json](outputs/current-field-screen-sensor-envelope.json)에
-  기록했다.
+  `outputs/current-field-screen-sensor-envelope.json`에 기록했다. 이 경로와 아래
+  `outputs/` 실행 결과는 재생성 가능한 로컬 감사 산출물이며 공개 스냅샷에는
+  포함하지 않는다.
 - measured-history/source-sensor/phase-pool operational report targeted 회귀:
   **35 passed** (2026-10-06). 세 경로도 같은 deterministic sensor-extrema
   요약을 내보내며, phase corner에 screening trace가 없으면 aggregate에서
@@ -1218,13 +1219,11 @@ Git remote: `https://github.com/lyullee/degali.git`
 - standalone sensor-calibration operational report targeted 회귀:
   **17 passed** (2026-10-06). `--sensor-array-envelope`도 동일한 detector
   extrema/withheld summary를 보존한다. 실제 CLI 확인 결과는
-  [outputs/current-field-screen-sensor-array.json](outputs/current-field-screen-sensor-array.json)에
-  기록했다.
+  `outputs/current-field-screen-sensor-array.json`에 기록했다.
 - 최신 nominal uncertainty-envelope CLI 재실행도
   `deterministic_sensor_envelope.status=complete`, `case_count=4`,
   `sensor_count=2`, `operational_screening=withheld`를 반환했다. 결과는
-  [outputs/current-field-screen-envelope-latest.json](outputs/current-field-screen-envelope-latest.json)에
-  저장했다.
+  `outputs/current-field-screen-envelope-latest.json`에 저장했다.
 - atmospheric-source batch conditional-review 경로를 보강했다. 이제 named-case
   authorization이 source-rate/weather/sensor deterministic envelope에도 적용되고,
   모든 corner의 refinement·in-plane receptor·resolved-uncertainty gate를 통과한
@@ -1265,8 +1264,7 @@ Git remote: `https://github.com/lyullee/degali.git`
 - 이 보강 후 지원센터 폴더를 실제로 재감사한 결과도
   `scanned_files=20`, `scan_complete=true`, `status=withheld`,
   `promotion_allowed=false`로 유지됐다. 결과는
-  [outputs/current-support-center-audit-latest.json](outputs/current-support-center-audit-latest.json)에
-  저장했다.
+  `outputs/current-support-center-audit-latest.json`에 저장했다.
 - 마지막 확인 명령:
 
 ```powershell
