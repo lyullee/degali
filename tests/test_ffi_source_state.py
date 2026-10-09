@@ -1,5 +1,6 @@
 from dataclasses import replace
 import json
+from pathlib import Path
 
 import pytest
 
@@ -12,6 +13,12 @@ from degali.validation.ffi_source_state import (
 )
 from degali.validation.spadeadam import load
 from degali.cli import main
+
+
+pytestmark = pytest.mark.skipif(
+    not Path("reference/spadeadam/conditions.csv").is_file(),
+    reason="requires the locally controlled FFI/SPADEADAM reference tables",
+)
 
 
 def _trial(test: int = 6):

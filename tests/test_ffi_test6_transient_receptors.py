@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 import runpy
 
 import pytest
@@ -36,6 +37,10 @@ def test_transient_replay_history_contract_is_strict(tmp_path, replay_tool):
         replay_tool["read_wind_history_csv"](history)
 
 
+@pytest.mark.skipif(
+    not Path("reference/spadeadam/conditions.csv").is_file(),
+    reason="requires the locally controlled FFI/SPADEADAM reference tables",
+)
 def test_transient_replay_emits_hash_pinned_compact_observation_artifact(
     tmp_path, replay_tool,
 ):

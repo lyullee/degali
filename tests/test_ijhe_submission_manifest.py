@@ -1,6 +1,15 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from tools.build_ijhe_submission_manifest import build
+
+
+pytestmark = pytest.mark.skipif(
+    not Path("outputs/ijhe-manuscript-draft-2026-10-09.docx").is_file(),
+    reason="requires the local IJHE submission artifact set",
+)
 
 
 def test_ijhe_submission_manifest_pins_source_files(tmp_path):

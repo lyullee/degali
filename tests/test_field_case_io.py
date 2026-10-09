@@ -284,7 +284,10 @@ def test_json_case_supports_explicit_pressure_driven_mass_flow_adapter():
     derived = request.scenario.source.mass_flow_kg_s
     assert derived.unit == "kg/s"
     assert derived.source == "orifice-json-review-A"
-    assert 0.0 < derived.lower < derived.nominal < derived.upper
+    # Ambient-pressure uncertainty need not widen a choked-flow result.  The
+    # deterministic envelope must contain the nominal value, but equality is
+    # physically valid when every declared corner has the same mass flux.
+    assert 0.0 < derived.lower <= derived.nominal <= derived.upper
     assert request.scenario.source.metadata["mass_flow_derivation"] == (
         "pressure_driven_homogeneous_equilibrium_throat"
     )

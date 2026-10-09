@@ -7,6 +7,10 @@ from tools.build_ijhe_docx import build
 from tools.audit_ijhe_docx_draft import audit
 
 
+@pytest.mark.skipif(
+    not Path("outputs/ijhe-main-figure-images-2026-10-09-clean/figure-1.png").is_file(),
+    reason="requires locally rendered IJHE figure derivatives",
+)
 def test_ijhe_docx_builder_preserves_upload_tables_and_placeholders(tmp_path):
     output = tmp_path / "manuscript.docx"
     record = build(
@@ -54,6 +58,10 @@ def test_ijhe_docx_builder_strict_rejects_unresolved_declarations(tmp_path):
         )
 
 
+@pytest.mark.skipif(
+    not Path("outputs/ijhe-manuscript-draft-2026-10-09.docx").is_file(),
+    reason="requires the locally rendered IJHE manuscript draft",
+)
 def test_ijhe_docx_audit_rejects_internal_repository_paths():
     record = audit()
     check = next(item for item in record["checks"] if item["id"] == "docx:internal-paths")

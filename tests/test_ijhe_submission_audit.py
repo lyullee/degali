@@ -1,6 +1,15 @@
 import json
+from pathlib import Path
+
+import pytest
 
 from tools.audit_ijhe_submission import audit, main
+
+
+pytestmark = pytest.mark.skipif(
+    not Path("outputs/ijhe-manuscript-draft-2026-10-09.docx").is_file(),
+    reason="requires the local IJHE submission artifact set",
+)
 
 
 def test_ijhe_audit_keeps_external_validation_pending_without_failing_draft(tmp_path, capsys):

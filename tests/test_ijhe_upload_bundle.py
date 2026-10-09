@@ -2,12 +2,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 
 from tools.build_ijhe_upload_bundle import _validate_preslhy_manifest, build
 
 
+@pytest.mark.skipif(
+    not Path(
+        "outputs/preslhy-e35-trial10-evidence-2026-10-09-v2/field-evidence-manifest.json"
+    ).is_file(),
+    reason="requires the local IJHE submission and conditional-evidence artifacts",
+)
 def test_ijhe_upload_bundle_is_author_neutral_and_hash_pinned(tmp_path):
     result = build(tmp_path / "bundle")
 
