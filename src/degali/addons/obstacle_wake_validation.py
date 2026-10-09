@@ -38,6 +38,56 @@ class NeutralObstacleWakePoint:
     concentration_ppm: float
     concentration_rms_ppm: float
 
+    def __post_init__(self) -> None:
+        """Reject corrupt rows without turning missing sentinels into data.
+
+        AIJ Case-H uses ``-999.9`` for missing values and the reader maps those
+        entries to ``nan``.  Missing velocity/concentration values therefore
+        remain admissible, while infinities and physically impossible negative
+        variances/concentrations are rejected at the typed boundary.
+        """
+        if isinstance(self.identifier, bool) or not isinstance(self.identifier, int):
+            raise TypeError("Case-H point identifier must be an integer")
+        if self.identifier <= 0:
+            raise ValueError("Case-H point identifier must be positive")
+        for name, value in {
+            "x_m": self.x_m, "y_m": self.y_m, "z_m": self.z_m,
+        }.items():
+            if isinstance(value, bool) or not math.isfinite(float(value)):
+                raise ValueError(f"Case-H {name} must be finite")
+        for name, values in {
+            "velocity_m_s": self.velocity_m_s,
+            "velocity_rms_m_s": self.velocity_rms_m_s,
+        }.items():
+            if not isinstance(values, tuple) or len(values) != 3:
+                raise TypeError(f"Case-H {name} must contain three values")
+            if any(isinstance(value, bool) or math.isinf(float(value)) for value in values):
+                raise ValueError(f"Case-H {name} cannot contain infinite values")
+        for name, value in {
+            "turbulent_kinetic_energy_m2_s2": self.turbulent_kinetic_energy_m2_s2,
+            "concentration_ppm": self.concentration_ppm,
+            "concentration_rms_ppm": self.concentration_rms_ppm,
+        }.items():
+            if isinstance(value, bool) or math.isinf(float(value)):
+                raise ValueError(f"Case-H {name} cannot be infinite")
+        if math.isfinite(float(self.turbulent_kinetic_energy_m2_s2)) and self.turbulent_kinetic_energy_m2_s2 < 0.0:
+            raise ValueError("Case-H turbulent kinetic energy cannot be negative")
+        # The published ``<c>`` channel is a background-subtracted mean and
+        # legitimately contains small signed values near the detection floor.
+        # Preserve those observations instead of clipping them or treating
+        # them as corrupt.  The RMS channel, in contrast, is a magnitude and
+        # must remain non-negative.
+        if (
+            math.isfinite(float(self.concentration_rms_ppm))
+            and self.concentration_rms_ppm < 0.0
+        ):
+            raise ValueError("Case-H concentration_rms_ppm cannot be negative")
+        if any(
+            math.isfinite(float(value)) and value < 0.0
+            for value in self.velocity_rms_m_s
+        ):
+            raise ValueError("Case-H velocity RMS values cannot be negative")
+
     @property
     def concentration_measured(self) -> bool:
         return math.isfinite(self.concentration_ppm)
@@ -88,6 +138,31 @@ class DenseGasFenceObservation:
     fence_percent: float
     control_std_percent: float
     fence_std_percent: float
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.position_m, tuple) or len(self.position_m) != 3:
+            raise TypeError("SMEDIS fence position must contain three values")
+        if any(
+            isinstance(value, bool) or not math.isfinite(float(value))
+            for value in self.position_m
+        ):
+            raise ValueError("SMEDIS fence position must contain finite values")
+        for name, value in {
+            "control_percent": self.control_percent,
+            "fence_percent": self.fence_percent,
+        }.items():
+            if isinstance(value, bool) or not math.isfinite(float(value)):
+                raise ValueError(f"SMEDIS {name} must be finite")
+            if value < 0.0:
+                raise ValueError(f"SMEDIS {name} cannot be negative")
+        for name, value in {
+            "control_std_percent": self.control_std_percent,
+            "fence_std_percent": self.fence_std_percent,
+        }.items():
+            if isinstance(value, bool) or math.isinf(float(value)):
+                raise ValueError(f"SMEDIS {name} cannot be infinite")
+            if math.isfinite(float(value)) and value < 0.0:
+                raise ValueError(f"SMEDIS {name} cannot be negative")
 
     @property
     def fence_to_control_ratio(self) -> float:

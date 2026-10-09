@@ -17,6 +17,13 @@ tmp/
 tmp_probe.py
 tmp_probe/
 
+# Local validation products and controlled evidence derivatives.  These may
+# contain third-party workbook/PDF-derived tables and are intentionally kept
+# outside a public source snapshot.  Recreate them from the documented audit
+# commands when the corresponding evidence is available under local control.
+outputs/
+artifacts/
+
 # Licensed/reference implementations and all external experimental data remain
 # local.  The public repository contains provenance, methods and derived
 # validation summaries only; it does not redistribute these source materials.

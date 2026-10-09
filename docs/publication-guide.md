@@ -1,6 +1,10 @@
 # DEGALI 공개 배포 가이드: GitHub, DOI, PyPI
 
-기준일: 2026-09-07. 저장소는 `lyullee/degali`, 패키지명은 `degali`다.
+기준일: 2026-10-09. 저장소는 `lyullee/degali`, 패키지명은 `degali`다.
+현재 소스 메타데이터 버전은 `0.3.0`이다. v0.2.0 archive DOI는
+`10.5281/zenodo.23105451`, v0.3.0 archive DOI는
+`10.5281/zenodo.23256538`, 전체 버전의 개념 DOI는
+`10.5281/zenodo.22646258`이다.
 
 ## 1. 권장 공개 순서
 
@@ -8,7 +12,7 @@
 GitHub 저장소 생성과 alpha 소스 공개
   -> Zenodo 초안에서 DOI 선예약
   -> DOI·정식 버전·배포일을 메타데이터에 반영
-  -> v0.1.0 커밋·태그·GitHub Release
+  -> v0.3.0 커밋·태그·GitHub 업로드
   -> PyPI Trusted Publishing 자동 배포
   -> 같은 산출물을 Zenodo 초안에 올리고 DOI 발행
   -> 공개 페이지와 해시 최종 확인
@@ -47,7 +51,7 @@ git push -u origin main
 4. 제목은 `DEGALI: Dense Gas Dispersion for Liquid Hydrogen`로 입력한다.
 5. Creator는 `Lee, Ugwiyeon`, affiliation은
    `Korea Gas Safety Corporation`으로 입력한다.
-6. License는 `MIT`, access는 `Open`, version은 `0.1.0`으로 둔다.
+6. License는 `MIT`, access는 `Open`, version은 `0.3.0`으로 둔다.
 7. DOI 항목에서 기존 DOI가 없다고 선택하고 `Get a DOI now!`로 DOI를
    선예약한다. 이 단계에서는 아직 Publish를 누르지 않는다.
 8. 발급된 DOI를 정확히 복사해 다음 위치에 넣는다.
@@ -61,8 +65,8 @@ README.md: Zenodo DOI badge와 인용 링크
 9. 정식 배포물 생성 후 아래 두 파일을 같은 Zenodo 초안에 업로드한다.
 
 ```text
-dist/degali-0.1.0.tar.gz
-dist/degali-0.1.0-py3-none-any.whl
+dist/degali-0.3.0.tar.gz
+dist/degali-0.3.0-py3-none-any.whl
 ```
 
 필요하면 GitHub가 생성한 source archive도 함께 올릴 수 있으나 같은 내용을
@@ -98,10 +102,10 @@ PyPI API token을 로컬이나 GitHub secret에 저장하지 않는다. 저장�
 DOI를 선예약한 뒤 개발 버전을 정식 버전으로 바꾼다.
 
 ```text
-pyproject.toml: version = "0.1.0"
-CITATION.cff: version = "0.1.0"
-CITATION.cff: date-released = 2026-09-07
-CITATION.cff: doi = "선예약 DOI"
+pyproject.toml: version = "0.3.0"
+CITATION.cff: version = "0.3.0"
+CITATION.cff: date-released = 2026-10-09
+CITATION.cff: doi = "10.5281/zenodo.23256538"
 ```
 
 그다음 전체 공개 검사와 핵심 시험을 실행한다.
@@ -117,17 +121,17 @@ python -m twine check dist/*
 
 ```bash
 git add .
-git commit -m "Release DEGALI 0.1.0"
-git tag -a v0.1.0 -m "DEGALI 0.1.0"
+git commit -m "Release DEGALI 0.3.0"
+git tag -a v0.3.0 -m "DEGALI 0.3.0"
 git push origin main
-git push origin v0.1.0
+git push origin v0.3.0
 ```
 
 ## 6. GitHub Release와 자동 PyPI 배포
 
 1. GitHub > Releases > Draft a new release를 연다.
-2. 기존 태그 `v0.1.0`을 선택한다. 새로 다른 태그를 만들지 않는다.
-3. 제목은 `DEGALI 0.1.0`, 설명에는 alpha 연구용 경고와 CHANGELOG를 넣는다.
+2. 기존 태그 `v0.3.0`을 선택한다. 새로 다른 태그를 만들지 않는다.
+3. 제목은 `DEGALI 0.3.0`, 설명에는 alpha 연구용 경고와 CHANGELOG를 넣는다.
 4. Publish release를 누르면 `release.yml`이 실행된다.
 5. workflow는 태그와 패키지 버전이 정확히 같은지, `.dev0`가 아닌지,
    공개 검사와 `twine check`가 통과하는지 확인한 뒤 PyPI에 올린다.
@@ -137,22 +141,22 @@ git push origin v0.1.0
 
 ## 7. 마지막 일치 검사
 
-다음 네 위치가 모두 `0.1.0`, 동일 DOI와 동일 저장소를 가리켜야 한다.
+다음 네 위치가 모두 `0.3.0`, 동일 DOI와 동일 저장소를 가리켜야 한다.
 
-- GitHub Release `v0.1.0`
-- PyPI `degali 0.1.0`
-- Zenodo software record `0.1.0`
+- GitHub tag/release `v0.3.0`
+- PyPI `degali 0.3.0` (배포한 경우)
+- Zenodo software record `0.3.0`
 - 저장소의 `CITATION.cff`
 
 로컬 `dist` 파일과 공개 파일의 SHA-256도 비교한다. 문제가 생기면 기존 PyPI
-버전과 Zenodo 파일을 덮어쓰지 말고 코드를 수정해 `0.1.1`을 발행한다.
+버전과 Zenodo 파일을 덮어쓰지 말고 코드를 수정해 `0.3.1` 이상을 발행한다.
 
 ## 8. 현재 중단점
 
-- GitHub CLI는 현재 PC에 설치돼 있지 않다. 웹에서 저장소를 만들거나 CLI를
-  설치한 뒤 인증해야 한다.
+- GitHub CLI는 현재 PC에 설치돼 있지 않으므로 Git 원격 인증과 GitHub 웹을
+  사용한다.
 - `lyullee` 계정은 Ugwiyeon Lee의 소유로 확인됐다.
-- Zenodo 계정 로그인과 DOI 선예약은 사용자 본인 확인이 필요하다.
+- Zenodo v0.3.0 DOI는 `10.5281/zenodo.23256538`로 선예약했다.
 - PyPI 계정 로그인, 2FA 및 pending trusted publisher 등록은 사용자 본인
   확인이 필요하다.
-- DOI가 아직 없으므로 버전은 의도적으로 `0.1.0.dev0`로 유지한다.
+- 다음 공개 변경은 기존 DOI 레코드를 덮어쓰지 말고 `0.3.1` 이상의 새 버전으로 발행한다.

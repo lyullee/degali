@@ -56,6 +56,47 @@ but worsens other acceptance metrics, so it is not the default. These samples
 are correlated observations from one campaign, not 38 or 41 independent
 validation experiments.
 
+### Current IJHE manuscript baseline
+
+The manuscript freeze used for the IJHE submission track is reported separately
+from the historical first-pass table above. On nine momentum-dominated
+PRESLHY E3.5 releases (62 arc maxima), the pre-specified peak operator gives
+MG = 1.047, VG = 1.425 and FAC2 = 0.839. A synchronised 20 s mean operator
+on seven trials gives MG = 0.544, VG = 4.601 and FAC2 = 0.761, while the
+independent six-arc FFI/DNV screen gives MG = 1.245, VG = 1.373 and FAC2 =
+0.833. These are separate evidence lanes, not one pooled accuracy score; the
+low-wind FFI Test 6 residual remains an explicit application limit.
+
+The accompanying 3-D transient solver is a numerical research extension. Its
+grid-convergence and mass-conservation results are documented in the
+[IJHE submission-readiness record](docs/ijhe-submission-readiness.md) and do
+not constitute measured field validation.
+
+Run `python tools/audit_ijhe_submission.py` before circulating a manuscript
+snapshot. It checks the claim boundaries, numerical-verification artifact and
+public-snapshot safety, while retaining an explicit warning until a matched
+time-resolved field event is available.
+
+The draft upload bundle is [the manuscript](MANUSCRIPT_LH2_VALIDATION.md),
+[Supplementary Information](IJHE_SUPPLEMENTARY_INFORMATION.md),
+[Highlights](IJHE_HIGHLIGHTS.md) and a
+[cover-letter draft](IJHE_COVER_LETTER_DRAFT.md).
+The [graphical abstract](IJHE_GRAPHICAL_ABSTRACT.svg) and
+[figure/table register](docs/ijhe-figure-table-register.md) keep the upload
+artifacts reproducible.
+
+An author-neutral assembled draft is generated with
+`tools/build_ijhe_upload_bundle.py` in
+`outputs/IJHE_UPLOAD_DRAFT_LATEST/`. Its `BUNDLE_STATUS.md` and
+`bundle-manifest.json` keep the remaining author and external-evidence gates
+visible; the directory must not be treated as a final upload until those gates
+are closed.
+
+The separately audited [open-channel H₂ timing boundary](docs/open-channel-h2-boundary.md)
+is retained as supporting evidence only; it is not promoted to atmospheric
+LH₂ validation because its weather, geometry and common-clock evidence are
+incomplete.
+
 The research-only six-flux thermal-moment marcher now passes its preregistered
 numerical extension across PRESLHY Trials 11, 12, 22, 23, 24 and 25: all coarse
 and refined paths reach their frozen stations, with maximum independent balance
@@ -76,6 +117,317 @@ See [model status](docs/stage1-results-2026-09-06.md),
 [data/reproduction notes](docs/DATA_AND_REPRODUCTION.md). The current
 availability and limitations of the LH2 measurements are summarized in the
 [LH2 data-readiness register](docs/lh2-data-readiness.md).
+
+## Field-deployment extension (preliminary)
+
+An opt-in local 2-D wind-plane, conservative semi-finite-volume screening
+path now makes the release boundary, flash state, weather, surface, sensors,
+obstacle geometry and deterministic uncertainty bounds explicit. A selected
+historian event can enter only through an SI CSV map with calibrated P/T/mass
+flow channels, a separate phase/flash-state evidence identifier and a retained
+file fingerprint; an ordinary pressure trend or nominal volume flow is not
+converted into a leak source. Long historian windows can reuse a bounded LH2
+property table instead of calling CoolProp for every interval.
+
+This path is suitable only for conditional operational screening and research.
+It is not a CFD solver, a building-wake closure, a design-basis calculation or
+an approval decision; local LH2 obstacle validation remains outstanding. See
+the [deployment roadmap](docs/field-deployment-roadmap-2026-10-05.md) and
+[connected-project evidence review](docs/field-evidence-readiness-2026-10-05.md).
+
+For a declared nominal site case, start from the synthetic
+[field-case template](docs/field-screening-case.example.json), replace every
+evidence ID and value under engineering control, then run:
+
+```bash
+degali field-screen field-case.json --output new-field-execution.json
+```
+
+The command runs its grid/time refinement by default and records its input
+SHA-256, numerical report and fail-safe disposition. `--allow-conditional` is
+an explicit accountable-review opt-in for screening only after relevant
+source/weather/detector uncertainty has been propagated; it never enables a
+design-basis or approval result. The flag requires the strict case's
+[`conditional_review` record](docs/field-conditional-review.md), which is
+retained in the execution JSON. The nominal template does not include a
+historian or a post-flash schedule. A selected SI historian CSV may be added
+only through the [quality-gated measured-history mapping](docs/field-measured-history-input.md);
+post-flash schedules still retain their dedicated API/provenance gate and must
+carry an explicit non-default `source_id` when attached through the Python
+field request API.
+
+For a pressure/temperature-only historian, the programmatic
+`PressureDrivenMeasuredHistory` path is the only supported source derivation:
+`direct_vapour_schedule_from_pressure_driven_history()` recomputes an explicit
+orifice boundary interval by interval, and
+`run_field_pressure_driven_history_envelope()` propagates its coherent source
+corners into the semi-FV screen. Use
+`run_field_joint_pressure_driven_history_envelope()` when ambient, weather and
+detector corners must be propagated with that source. A pressure trend is never interpreted as a
+leak rate; declared opening area/discharge coefficient (including any bounds
+that must be crossed by the joint envelope) and source location/direction
+corners are fixed before wind-plane projection. Independent event, phase,
+clock and calibration evidence remain mandatory.
+The strict case-file equivalent is `pressure_driven_history`; its CSV map
+contains P/T (and optional liquid fraction) but no mass-flow column, so the
+zero source placeholder cannot be mistaken for a measured rate. `field-screen`
+and `field-verify` retain the pressure-driven history kind and its CSV digest
+through the joint uncertainty/refinement envelope.
+
+Ambient temperature, absolute pressure and air-density bounds may also be
+declared at the top level as `ambient_temperature_uncertainty_k`,
+`ambient_pressure_uncertainty_pa` and `ambient_air_density_uncertainty_kg_m3`.
+They are deterministic corners, not probability intervals; a nominal result
+with unresolved ambient bounds remains withheld by the operational gate. The
+phase-routing/pool transport adapter carries the same ambient corners through
+the phase ledger and clears them only on the corresponding field corner;
+measured-history operational runs remain withheld until their time-aligned
+history and ambient boundaries are both propagated.
+When an ambient-pressure bound is present, the reusable LH2 saturation table
+also spans both endpoint saturation temperatures before any corner is run.
+Likewise, a fingerprinted validation dataset is evidence identity only: the
+field gate remains conditional until a matched observed-vs-model validation
+score is generated.
+Direct ambient uncertainty objects enforce `K`, `Pa`, and `kg/m3` units before
+their corners enter flash, transport, or detector conversion, matching the
+strict case-file boundary.
+The joint measured-history envelope carries the same ambient temperature and
+pressure corners through each history re-flash and applies ambient air-density
+corners to detector conversion; a completed joint case clears only the ambient
+corner it actually evaluated.
+
+When the case contains relevant bounded source, weather or primary-detector
+inputs, use `--uncertainty-envelope`. It runs every deterministic corner and
+its refinement, then allows screening only if every corner passes the same
+gate. With a quality-gated `measured_history` object, the same flag instead
+runs the joint P/T/flow/phase-history, weather and detector envelope:
+
+```bash
+degali field-screen field-case.json --uncertainty-envelope --allow-conditional \
+  --output new-field-envelope.json
+```
+
+The envelope is still a sensitivity set rather than a confidence interval.
+For a finite transient release, `scenario.source.duration_s` may itself be a
+bounded object, or a numeric duration may be paired with
+`duration_uncertainty`; the nominal duration and every lower/upper timing
+corner are retained in the source contract. The transport duration must cover
+the upper declared release duration. No timing probability or unrecorded
+source schedule is inferred.
+The source `location_m` may likewise use three SI bounded coordinate objects;
+their Cartesian lower/upper corners are propagated through the wind-plane
+projection and transport case. Mixed numeric/bounded coordinate arrays are
+rejected, and this remains a deterministic geometry sensitivity rather than a
+probability distribution.
+The same three-component bounded form is available for `direction_m`; every
+corner must remain a non-zero vector and is preserved for jet/phase-routing
+handoff calculations. The direct scalar screen records these direction
+corners even where its post-flash source closure does not use momentum.
+An explicit base case may also declare `distributed_vapour_sources` for
+already-atmospheric pool/droplet or other ledger branches. Each source carries
+its global position, a unit-labelled vertical scalar width, a finite
+zero-endpoint rate schedule and evidence ID; bounded position/width values are
+expanded into separate source-shape corners and are not treated as a
+probability distribution. The operational gate withholds a nominal result
+until those corners are propagated.
+For categorical meteorological stability uncertainty, declare evidence-backed
+alternatives and a diffusivity for every class; the local solver does not
+invent a turbulence correlation. The [stability-alternative protocol](docs/field-stability-alternatives.md)
+adds those cases to both nominal and historian joint envelopes.
+
+`scenario.weather.direction_deg` is a circular degree interval, rather than a
+linear number range. A wind record crossing north can therefore declare
+`lower: 350`, `nominal: 0`, `upper: 10`; the envelope evaluates 350° and 10°
+and records the short 20° sector. It does not reinterpret that input as a
+340° sweep through south or average a changing wind into one wind plane.
+
+Obstacle footprints may be global-axis-aligned or explicitly rotated; both are
+reprojected for each wind-direction corner and retained in the report. Linear
+dimensions (and an oriented bearing when needed) may be declared as explicit
+bounded geometry values with an `uncertainty_evidence_id`. The field envelope
+then recomputes every obstacle-mask corner, while the nominal operational
+screen remains withheld until those corners are resolved. See the [obstacle
+input contract](docs/field-obstacle-input.md) for the exact JSON forms,
+required site-coordinate reference and the limits of the conservative 2-D
+mask.
+
+`lh2_validation_available: true` is not a free-standing claim. Strict case
+files must also carry `validation_evidence` with a SHA-256 fingerprint,
+positive row count, common-clock ID, source/weather/obstacle/receptor geometry
+IDs and temporal-operator ID. A free-field evidence record cannot qualify an
+obstacle case; an unbacked validation flag is rejected before transport.
+
+For an actual fixed-sensor validation replay, `degali field-validate` accepts
+the separate `degali.field-validation-input.v1` contract. It checks every
+observed row's clock/obstacle IDs and file fingerprint before calculating
+matched-sensor MAE, RMSE and bias. See
+[field-validation-input.md](docs/field-validation-input.md); no unmeasured
+hazard distance is interpolated. If an observed CSV declares an
+`observation_kind` column, `lower_bound` rows are treated as censored
+one-sided constraints, excluded from symmetric accuracy metrics, and prevent
+`qualified` status even when satisfied.
+
+`degali field-audit <directory>` scans an external CSV/JSON/XLSX directory read-only
+for the five evidence channels needed to assemble that validation case. It is
+readiness triage only: even `candidate_complete` keeps
+`promotion_allowed=false` and cannot create `FieldValidationEvidence`; a scan
+limit sets `scan_complete=false` and also prevents promotion. The saved record
+includes candidate-file `diagnostic_counts` for near-miss categories and
+recomputes them on read-back. See
+[field-evidence-audit.md](docs/field-evidence-audit.md).
+
+After an accountable reviewer reconciles the five files to one event and common
+clock, `FieldEvidenceManifest.from_audit()` can record the selected paths,
+SHA-256 digests and explicit source/weather/geometry IDs. New packages should
+also provide `sensor_set_id`, a SHA-pinned `sensor_registry_artifact` (sensor
+calibration/response metadata), and an accountable `operator_id`; missing
+metadata is reported as `evidence_readiness=conditional`. The manifest
+rechecks its files and remains `promotion_allowed=false`; see
+[field-evidence-manifest.md](docs/field-evidence-manifest.md).
+The package layout and minimum CSV/JSON fields are listed in
+[field-evidence-intake-template.md](docs/field-evidence-intake-template.md).
+`field-validation-input.v1` may carry the same manifest as
+`validation_manifest`; the parser then rejects any path, digest or explicit-ID
+mismatch between the manifest and `validation_evidence`.
+The equivalent CLI boundary is
+`degali field-evidence-manifest-create <audit-execution.json>` with five
+repeated `--selected-path channel=path` options and explicit event/identity
+metadata, plus `--sensor-set-id`, `--operator-id` and optionally
+`--sensor-registry-path`; it refuses incomplete audits and existing output
+paths. Verification emits machine-readable `conditional` or `withheld`
+readiness instead of silently treating missing evidence as valid.
+
+For the public FFI/Spadeadam horizontal-release lane, use
+`degali ffi-source-state`. It crosses explicitly declared source, wind and
+ambient endpoints through the unchanged free-field jet and evaluates every
+reported sensor coordinate. The output is a deterministic residual envelope,
+not a confidence interval or site-acceptance record:
+
+```bash
+degali ffi-source-state --test 6 --radius 30 \
+  --rate-bounds 0.82,0.833,0.85 \
+  --wind-bounds 2.2,2.3,2.4 --max-cases 4 \
+  --require-complete --output ffi-test6-source-state.json
+```
+
+See [the FFI source-state envelope note](docs/ffi-source-state-envelope.md).
+
+When a reviewer has an owner-exported Test 6 wind history, the separate
+observation replay can be run with
+`tools/audit_ffi_test6_transient_receptors.py`. It requires the exact
+`time_s,wind_speed_ms,wind_direction_from_deg` CSV contract, a declared
+steady-wind table and window, fingerprints the history, and reports compact
+true/indicated sensor statistics. It does not add plume storage or infer a
+time-varying source; its execution artifact always keeps promotion disabled.
+Use the same tool with `--verify <replay.json>` to recheck the history and
+reference-table hashes without rerunning the plume.
+
+`degali field-source` validates a separate, already-atmospheric source-rate
+CSV. Its strict evidence record fingerprints the file and binds it to a source
+boundary and common clock; the final endpoint must be zero. It does not infer a
+flash, liquid fraction, pool evaporation, or leak rate from pressure/level data.
+See [`field-source-input.md`](docs/field-source-input.md).
+The same parsed schedule can be passed to
+`run_field_operational_uncertainty_envelope(...,
+atmospheric_source_schedule=...)` so each deterministic source corner receives
+its own refinement and fail-safe screening decision.
+The resulting report also contains `deterministic_sensor_envelope`: per-detector
+peak/final/time-average extrema over completed corners, with missing or withheld
+traces counted explicitly rather than replaced by zero. These extrema are
+deterministic sensitivity bounds, not confidence intervals.
+The same field is emitted by the measured-history, source-plus-sensor and
+phase/pool operational envelope reports, as well as the standalone
+`--sensor-array-envelope` calibration path.
+The CLI keeps that source contract in a separate file and composes it only at
+the complete-envelope boundary:
+
+```bash
+degali field-screen field-case.json --uncertainty-envelope \
+  --atmospheric-source-case source-case.json \
+  --output field-source-execution.json
+```
+
+The source-case path and SHA-256 are retained in the execution input record.
+
+For named batch exports, pass the parsed schedule through
+`export_field_screening_batch(...,
+atmospheric_source_schedules={"case-name": schedule})`. Those cases are
+written as complete operational-uncertainty-envelope reports and keep the
+refinement, in-plane receptor and resolved-uncertainty gates enabled; the
+batch API rejects attempts to waive them. Conditional-review opt-in requires
+one authorization for every named case and is retained in the manifest; the
+aggregate can become `conditional_allowed` only after every deterministic
+source/weather/sensor corner passes those gates.
+
+For a file-based named batch, use the strict
+[`field-batch-input.md`](docs/field-batch-input.md) contract:
+
+```bash
+degali field-batch batch.json --output-directory field-batch-output
+```
+
+The execution record fingerprints the batch file, every case JSON and every
+optional source-schedule JSON. Its top-level
+`degali.field-batch-summary.v1` `summary` is derived from the typed
+operational decisions and reports case/status counts plus the
+fail-safe `all_screening_allowed` flag. Historian and phase-routing cases are kept on
+their dedicated envelope paths rather than mixed into this batch.
+For a measured-history `field-screen` execution, `field-verify` also reimports
+the current historian CSV and compares its SHA-256/event provenance with every
+nested report, so changing the CSV without regenerating the execution fails
+closed.
+Complete bounded `nominal_field`, phase-routing, standalone sensor-array and
+joint source-sensor executions are replayed from their serialized numerical
+options; the joint source-sensor path also reopens its optional atmospheric
+schedule. Only genuinely option-incomplete envelope or batch records remain
+integrity/semantic checks without a fabricated replay.
+`degali field-verify` also checks serialized semi-FV conservation diagnostics
+inside non-replayable envelope and batch reports: per-source schedule residuals
+must be finite and consistent with their recorded maximum, and any residual
+outside the numerical gate must carry a matching blocked applicability reason
+and operational `gate_codes` entry. Compact transport concentration and sensor
+extrema/time/density records are also checked, including the invariant that a
+withheld detector has warnings and no fabricated result. The serialized
+operational decision itself must retain consistent status, allowance,
+reason/action, and unique gate-code fields. Source-level injected-mass labels
+and totals are cross-checked against the ledger and schedule residual records.
+It cannot be combined with the measured-history or phase-routing source paths,
+and it is rejected unless every source corner is refined and gated.
+The CLI direct-envelope composition accepts only
+`post_flash_atmospheric_vapour`; pool or droplet schedules require their
+location-bearing distributed/phase-routing handoff and are not placed at the
+nozzle by inference.
+
+For an explicitly routed liquid/rainout branch, the [phase-routing transport
+handoff](docs/field-phase-routing-transport.md) preserves direct flash and
+adds only a conservative time-resolved pool-evaporation ledger as a separate
+field source. It withholds missing pool source histories rather than filling
+them with a fitted evaporation or wake coefficient. The dedicated
+[`degali.field-phase-routing-screening-input.v1` example](docs/field-phase-routing-case.example.json)
+can be executed with `degali field-screen ... --uncertainty-envelope`; the CLI
+requires the complete phase/pool/weather/surface/sensor envelope for this path.
+If evidence-backed bounds are available for phase/pool scalars, the strict
+`phase_routing.uncertainty` object propagates their lower/upper corners (with
+the upper post-release bound enforced in the transport duration); no phase
+range or droplet-population distribution is inferred. The pool launch scalar
+width can also carry an explicit bounded `m` interval, which is evaluated as
+separate source-shape corners. Droplet population alternatives are accepted
+only as complete evidence-backed class corners whose mass fractions sum to one.
+
+To audit DEGALI against supplied SLABx/CFD predictions—or to expose a
+steady-versus-transient mismatch—use the separate fixed-sensor comparison
+contract. It preserves the two CSV input fingerprints, units, sensor geometry,
+source/weather IDs, temporal operator and (when applicable) the obstacle-mask or
+wake-closure representation rather than inferring equivalence from model names:
+
+```bash
+degali field-compare comparison.json --output new-comparison.json --require-comparable
+```
+
+See the [comparison template](docs/field-model-comparison-case.example.json)
+and [comparison protocol](docs/field-model-comparison.md). A mismatch retains
+numerical rows but withholds a model-selection conclusion; even an aligned
+comparison reports only monitored receptors, not an interpolated risk distance.
 
 ## Installation
 
@@ -259,6 +611,10 @@ The consolidated [technical reference](docs/technical-reference.md) describes
 the governing physics, LH2 extensions, validation process, quantitative
 results and remaining model-form limitations.
 
+For the IJHE manuscript track, use the
+[submission-readiness record](docs/ijhe-submission-readiness.md) and run
+`python tools/audit_ijhe_submission.py` before circulating a draft.
+
 ## Repository layout
 
 ```text
@@ -278,9 +634,13 @@ workflow. See [security and safety reporting](SECURITY.md).
 
 ## Citation and license
 
-Citation metadata, including the version DOI, are provided in
-[`CITATION.cff`](CITATION.cff). The README DOI badge uses the concept DOI so it
-continues to resolve to the latest archived DEGALI release.
+Citation metadata, including the published concept DOI and the current
+version-specific DOI, are provided in [`CITATION.cff`](CITATION.cff). The
+README DOI badge uses the concept DOI so it continues to resolve to the latest
+archived DEGALI release.
+
+The exact archive for DEGALI `v0.3.0` is
+[`10.5281/zenodo.23256538`](https://doi.org/10.5281/zenodo.23256538).
 
 The complete GitHub, Zenodo DOI and PyPI release sequence is documented in the
 [publication guide](docs/publication-guide.md).

@@ -582,10 +582,10 @@ import degali
 print(degali.__version__)
 ```
 
-The DEGALI 0.2.0 version DOI is
-[`10.5281/zenodo.23105451`](https://doi.org/10.5281/zenodo.23105451). The
-concept DOI for all DEGALI versions is
-[`10.5281/zenodo.22646258`](https://doi.org/10.5281/zenodo.22646258).
+The published concept DOI for DEGALI is
+[`10.5281/zenodo.22646258`](https://doi.org/10.5281/zenodo.22646258). A
+version-specific DOI for the current `0.3.0` source snapshot is
+[`10.5281/zenodo.23256538`](https://doi.org/10.5281/zenodo.23256538).
 
 ## 12. Further documentation
 

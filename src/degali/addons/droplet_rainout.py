@@ -15,7 +15,7 @@ heat balance or to the conservative axisymmetric dynamic-pool module.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import math
 from typing import TYPE_CHECKING, Sequence
 
@@ -66,6 +66,40 @@ class DropletTransportInput:
 
 
 @dataclass(frozen=True)
+class DropletEvaporationSegment:
+    """A mass-weighted section of one class's resolved evaporation path.
+
+    ``vapour_mass_fraction`` is relative to that class's inlet liquid mass
+    flow.  The segment is an Euler-trajectory record, not a fitted plume
+    source or an assertion of turbulent droplet dispersion.
+    """
+
+    start_time_s: float
+    end_time_s: float
+    start_position_m: tuple[float, float, float]
+    end_position_m: tuple[float, float, float]
+    vapour_mass_fraction: float
+    vapour_centroid_m: tuple[float, float, float]
+
+    def __post_init__(self) -> None:
+        if not (
+            math.isfinite(self.start_time_s)
+            and math.isfinite(self.end_time_s)
+            and self.end_time_s > self.start_time_s
+        ):
+            raise ValueError("evaporation segment time bounds must be finite and increasing")
+        for name, position in {
+            "start_position_m": self.start_position_m,
+            "end_position_m": self.end_position_m,
+            "vapour_centroid_m": self.vapour_centroid_m,
+        }.items():
+            if len(position) != 3 or not all(math.isfinite(float(value)) for value in position):
+                raise ValueError(f"{name} must contain three finite values")
+        if not math.isfinite(self.vapour_mass_fraction) or self.vapour_mass_fraction <= 0.0:
+            raise ValueError("vapour_mass_fraction must be positive and finite")
+
+
+@dataclass(frozen=True)
 class DropletClassOutcome:
     """Endpoint and mass split for one injected droplet class."""
 
@@ -80,6 +114,7 @@ class DropletClassOutcome:
     final_diameter_m: float
     maximum_reynolds_number: float
     status: str
+    evaporation_segments: tuple[DropletEvaporationSegment, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -182,6 +217,7 @@ def _integrate_class(
     item: DropletClass,
     *,
     max_time_s: float,
+    trajectory_segment_duration_s: float | None,
 ) -> DropletClassOutcome:
     position = _finite_vector(boundary.release_position_m, "release_position_m")
     velocity = _finite_vector(boundary.initial_velocity_m_s, "initial_velocity_m_s")
@@ -193,6 +229,11 @@ def _integrate_class(
     # The continuum point-drop equations become singular at exactly zero.
     # This limit removes less than 1e-18 of the original class mass.
     extinction_diameter = max(1.0e-12, initial_diameter * 1.0e-6)
+    evaporation_segments: list[DropletEvaporationSegment] = []
+    segment_start_time_s = time_s
+    segment_start_position = position.copy()
+    segment_mass_fraction = 0.0
+    segment_centroid_numerator = np.zeros(3, dtype=float)
 
     while (
         time_s < max_time_s
@@ -229,6 +270,7 @@ def _integrate_class(
         old_position = position.copy()
         old_velocity = velocity.copy()
         old_diameter = diameter
+        old_time_s = time_s
         acceleration = drag_rate * slip
         acceleration[2] -= GRAVITY_M_S2 * (
             1.0 - boundary.air_density_kg_m3 / boundary.liquid_density_kg_m3
@@ -250,6 +292,33 @@ def _integrate_class(
             diameter = old_diameter + fraction * (diameter - old_diameter)
             time_s -= (1.0 - fraction) * dt
             position[2] = 0.0
+        evaporated_fraction = max(
+            0.0, (old_diameter**3 - diameter**3) / initial_diameter**3
+        )
+        if trajectory_segment_duration_s is not None:
+            segment_mass_fraction += evaporated_fraction
+            segment_centroid_numerator += evaporated_fraction * 0.5 * (
+                old_position + position
+            )
+            if time_s - segment_start_time_s >= trajectory_segment_duration_s:
+                if segment_mass_fraction > 0.0:
+                    evaporation_segments.append(DropletEvaporationSegment(
+                        start_time_s=float(segment_start_time_s),
+                        end_time_s=float(time_s),
+                        start_position_m=tuple(float(value) for value in segment_start_position),
+                        end_position_m=tuple(float(value) for value in position),
+                        vapour_mass_fraction=float(segment_mass_fraction),
+                        vapour_centroid_m=tuple(
+                            float(value) for value in (
+                                segment_centroid_numerator / segment_mass_fraction
+                            )
+                        ),
+                    ))
+                segment_start_time_s = time_s
+                segment_start_position = position.copy()
+                segment_mass_fraction = 0.0
+                segment_centroid_numerator = np.zeros(3, dtype=float)
+        if position[2] <= 0.0:
             break
 
     if diameter <= extinction_diameter:
@@ -266,6 +335,29 @@ def _integrate_class(
     ground = remaining if status == "ground_impact" else 0.0
     airborne_liquid = remaining if status == "trajectory_time_limit" else 0.0
     vapour = inlet - ground - airborne_liquid
+    if trajectory_segment_duration_s is not None and segment_mass_fraction > 0.0:
+        evaporation_segments.append(DropletEvaporationSegment(
+            start_time_s=float(segment_start_time_s),
+            end_time_s=float(time_s),
+            start_position_m=tuple(float(value) for value in segment_start_position),
+            end_position_m=tuple(float(value) for value in position),
+            vapour_mass_fraction=float(segment_mass_fraction),
+            vapour_centroid_m=tuple(
+                float(value) for value in (
+                    segment_centroid_numerator / segment_mass_fraction
+                )
+            ),
+        ))
+    if trajectory_segment_duration_s is not None and evaporation_segments:
+        recorded_fraction = sum(item.vapour_mass_fraction for item in evaporation_segments)
+        required_fraction = vapour / inlet
+        correction = required_fraction - recorded_fraction
+        if abs(correction) > 1.0e-15:
+            final = evaporation_segments[-1]
+            evaporation_segments[-1] = replace(
+                final,
+                vapour_mass_fraction=final.vapour_mass_fraction + correction,
+            )
     return DropletClassOutcome(
         diameter_m=initial_diameter,
         inlet_mass_flow_kg_s=inlet,
@@ -278,6 +370,7 @@ def _integrate_class(
         final_diameter_m=float(diameter),
         maximum_reynolds_number=float(maximum_reynolds),
         status=status,
+        evaporation_segments=tuple(evaporation_segments),
     )
 
 
@@ -285,12 +378,27 @@ def transport_droplet_population(
     boundary: DropletTransportInput,
     *,
     max_time_s: float = 120.0,
+    trajectory_segment_duration_s: float | None = None,
 ) -> DropletPopulationResult:
-    """Transport all declared classes and close the liquid/vapour mass split."""
+    """Transport classes and optionally retain conservative evaporation paths.
+
+    With ``trajectory_segment_duration_s=None`` (the default), the historical
+    endpoint-only result is retained.  A positive interval records only
+    mass-weighted vapour-producing trajectory sections for an explicit
+    downstream atmospheric handoff.
+    """
 
     _validate_input(boundary, max_time_s)
+    if trajectory_segment_duration_s is not None and (
+        not math.isfinite(trajectory_segment_duration_s)
+        or trajectory_segment_duration_s <= 0.0
+    ):
+        raise ValueError("trajectory_segment_duration_s must be positive and finite or None")
     outcomes = tuple(
-        _integrate_class(boundary, item, max_time_s=max_time_s)
+        _integrate_class(
+            boundary, item, max_time_s=max_time_s,
+            trajectory_segment_duration_s=trajectory_segment_duration_s,
+        )
         for item in boundary.classes
     )
     vapour = sum(item.airborne_vapour_mass_flow_kg_s for item in outcomes)
@@ -674,7 +782,8 @@ def dynamic_rainout_pool(
 
 
 __all__ = [
-    "DropletClass", "DropletTransportInput", "DropletClassOutcome",
+    "DropletClass", "DropletTransportInput", "DropletEvaporationSegment",
+    "DropletClassOutcome",
     "DropletPopulationResult", "RainoutPoolCouplingResult",
     "transport_droplet_population", "droplet_transport_input_from_flash",
     "post_release_rainout_pool", "concurrent_rainout_pool",

@@ -19,6 +19,7 @@ SECRET_PATTERNS = {
     "OpenAI-style key": re.compile(rb"\bsk-[A-Za-z0-9_-]{20,}"),
     "AWS access key": re.compile(rb"\bAKIA[0-9A-Z]{16}\b"),
 }
+MARKDOWN_LINK_RE = re.compile(r"\]\(([^)]+)\)")
 ESSENTIAL = {
     "README.md",
     "LICENSE",
@@ -61,11 +62,40 @@ def project_version() -> str:
     return match.group(1)
 
 
+def markdown_link_errors(paths: list[pathlib.Path]) -> list[str]:
+    """Return missing local Markdown link targets in the candidate snapshot."""
+
+    errors: list[str] = []
+    for path in paths:
+        if path.suffix.lower() != ".md":
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            errors.append(f"Markdown file is not UTF-8: {path.relative_to(ROOT).as_posix()}")
+            continue
+        for match in MARKDOWN_LINK_RE.finditer(text):
+            target = match.group(1).strip().strip("<>")
+            if target.startswith(("http://", "https://", "mailto:", "data:", "#")):
+                continue
+            target = target.split("#", 1)[0].strip("`")
+            if not target:
+                continue
+            candidate = (path.parent / target).resolve()
+            if not candidate.exists():
+                errors.append(
+                    f"broken local Markdown link in {path.relative_to(ROOT).as_posix()}: {target}"
+                )
+    return errors
+
+
 def main() -> int:
     paths = publication_files()
     relative = {path.relative_to(ROOT).as_posix() for path in paths}
     errors: list[str] = []
     warnings: list[str] = []
+
+    errors.extend(markdown_link_errors(paths))
 
     missing = sorted(ESSENTIAL - relative)
     if missing:

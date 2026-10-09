@@ -4,6 +4,13 @@
 
 At 30 m in FFI/DNV Test 6, the reported arc maximum is 21.0 vol % H2. The frozen fast LH2 path predicts 6.03 vol % at the same measurement heights: observed/predicted = **3.48**. Test 6 is a horizontal 25.4 mm release at 0.5 m elevation, with reported mass flow 0.833 kg/s and P04 = 2.53 barg.
 
+The FFI report describes two stacked containers, a plastic drum and an
+instrument box on the test pad. The present calculation does not resolve those
+structures; this decomposition therefore remains a free-ground transport
+diagnostic, not an obstacle-wake validation. The site-geometry evidence and
+hash record are kept in
+`docs/ijhe-ffi-site-geometry-boundary-2026-10-09.md`.
+
 This is a decomposition of what public evidence can quantify, not a calibration exercise.
 
 ## Results

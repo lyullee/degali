@@ -1,0 +1,37 @@
+{
+  "schema": "degali.field-model-comparison-input.v1",
+  "threshold_mole_fraction": 0.04,
+  "position_tolerance_m": 0.001,
+  "left": {
+    "model_id": "DEGALI-semi-FV",
+    "temporal_mode": "transient",
+    "runtime_s": 2.4,
+    "csv_path": "results/degali-sensors.csv",
+    "prediction_column": "h2_mole_fraction",
+    "concentration_unit": "mole_fraction",
+    "comparison_basis": {
+      "source_boundary_id": "release-event-and-flash-v3",
+      "weather_id": "met-window-2026-10-05T100000Z",
+      "sensor_geometry_id": "layout-rev-B",
+      "temporal_operator_id": "trailing-60-s-mean",
+      "averaging_time_s": 60.0,
+      "obstacle_representation_id": "full-plane-mask-v1"
+    }
+  },
+  "right": {
+    "model_id": "SLABx-LH2",
+    "temporal_mode": "transient",
+    "runtime_s": 28.1,
+    "csv_path": "results/slabx-sensors.csv",
+    "prediction_column": "h2_volume_percent",
+    "concentration_unit": "volume_percent",
+    "comparison_basis": {
+      "source_boundary_id": "release-event-and-flash-v3",
+      "weather_id": "met-window-2026-10-05T100000Z",
+      "sensor_geometry_id": "layout-rev-B",
+      "temporal_operator_id": "trailing-60-s-mean",
+      "averaging_time_s": 60.0,
+      "obstacle_representation_id": "full-plane-mask-v1"
+    }
+  }
+}

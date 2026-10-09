@@ -22,6 +22,10 @@ import numpy as np
 
 _FLOW_TIME = "flow time [s]"
 _FLOW_RATE = "mass flow meter 1 [g/s]"
+_FLOW_RATE_COLUMNS = (
+    "mass flow meter 1 [g/s]",
+    "mass flow meter 2 [g/s]",
+)
 _SENSOR_TIME = "h2 sensor time"
 _SENSOR_SUFFIX = " h2 concentration [%]"
 
@@ -57,6 +61,7 @@ class OpenChannelHydrogenRun:
     mass_flow_g_s: np.ndarray
     sensor_time_s: np.ndarray
     sensor_percent: dict[str, np.ndarray]
+    flow_column: str = _FLOW_RATE
     dataset_doi: str = "10.23642/usn.26117989.v2"
     source_geometry: str = "open_ended_rectangular_channel"
 
@@ -102,8 +107,13 @@ def read_open_channel_h2_csv(path: str | Path) -> OpenChannelHydrogenRun:
     with source.open("r", encoding="utf-8-sig", newline="") as stream:
         reader = csv.DictReader(stream)
         fields = tuple(reader.fieldnames or ())
-        required = {_FLOW_TIME, _FLOW_RATE, _SENSOR_TIME}
+        flow_column = next(
+            (column for column in _FLOW_RATE_COLUMNS if column in fields), None
+        )
+        required = {_FLOW_TIME, _SENSOR_TIME}
         missing = required - set(fields)
+        if flow_column is None:
+            missing.add("mass flow meter 1/2 [g/s]")
         if missing:
             raise ValueError(
                 "FFI H2 CSV is missing required columns: " + ", ".join(sorted(missing))
@@ -114,7 +124,8 @@ def read_open_channel_h2_csv(path: str | Path) -> OpenChannelHydrogenRun:
         rows = list(reader)
 
     flow_time = np.asarray([_float(row.get(_FLOW_TIME)) for row in rows], dtype=float)
-    flow_rate = np.asarray([_float(row.get(_FLOW_RATE)) for row in rows], dtype=float)
+    assert flow_column is not None  # checked against the header above
+    flow_rate = np.asarray([_float(row.get(flow_column)) for row in rows], dtype=float)
     sensor_time = np.asarray([_float(row.get(_SENSOR_TIME)) for row in rows], dtype=float)
     flow_time, flow_rate = _finite_pair(flow_time, flow_rate)
     sensor_time_finite = np.isfinite(sensor_time)
@@ -136,6 +147,7 @@ def read_open_channel_h2_csv(path: str | Path) -> OpenChannelHydrogenRun:
     return OpenChannelHydrogenRun(
         source_path=source, flow_time_s=flow_time, mass_flow_g_s=flow_rate,
         sensor_time_s=sensor_time, sensor_percent=sensors,
+        flow_column=flow_column,
     )
 
 

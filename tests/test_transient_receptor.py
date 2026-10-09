@@ -6,10 +6,12 @@ import pytest
 from degali.addons.transient_receptor import (
     FixedReceptor,
     SteadyPlumeTable,
+    SourceHistory,
     WindHistory,
     first_order_sensor_response,
     meteorological_from_to_math_radians,
     replay_fixed_receptors,
+    replay_fixed_receptors_with_source_history,
 )
 
 
@@ -81,4 +83,63 @@ def test_replay_validates_histories_receptors_and_outputs():
             WindHistory([0.0], [1.0], [270.0]),
             [FixedReceptor("ok", 1.0, 0.0, 0.0)],
             lambda speed, x, y, z: np.nan,
+        )
+
+
+def test_source_history_packet_quadrature_conserves_mass_and_carries_state():
+    history = SourceHistory(
+        time_s=[0.0, 1.0, 2.0],
+        mass_rate_kg_s=[2.0, 1.0, 0.0],
+        pressure_pa=[100_000.0, 90_000.0, 80_000.0],
+        temperature_k=[25.0, 26.0, 27.0],
+        source_direction_to_deg=[350.0, 10.0, 30.0],
+        rate_operator="linear",
+    )
+    packets = history.to_packets(subdivisions_per_interval=2)
+    assert sum(packet.mass_kg for packet in packets) == pytest.approx(2.0)
+    assert packets[0].release_time_s == pytest.approx(0.25)
+    assert packets[0].pressure_pa == pytest.approx(97_500.0)
+    assert packets[0].temperature_k == pytest.approx(25.25)
+    assert packets[0].source_direction_to_deg == pytest.approx(355.0)
+    assert history.released_mass_kg() == pytest.approx(2.0)
+
+
+def test_source_history_replay_preserves_causal_travel_and_fixed_source_axis():
+    source = SourceHistory(
+        time_s=[0.0, 1.0, 2.0],
+        mass_rate_kg_s=[1.0, 0.0, 0.0],
+        source_direction_to_deg=[90.0, 90.0, 90.0],
+    )
+    wind = WindHistory(
+        time_s=[0.0, 1.0, 2.0],
+        speed_m_s=[1.0, 1.0, 1.0],
+        direction_from_deg=[270.0, 270.0, 270.0],
+    )
+    receptor = FixedReceptor("east", 1.0, 0.0, 0.0)
+    seen_axes = []
+
+    def packet_kernel(packet, age_s, relative_east, relative_north, height_m):
+        seen_axes.append(packet.source_direction_to_deg)
+        # A deliberately narrow test kernel: the packet is observed only when
+        # its causally advected centre reaches the receptor.
+        return packet.mass_kg if abs(relative_east) < 1.0e-12 else 0.0
+
+    trace = replay_fixed_receptors_with_source_history(
+        source, wind, [receptor], packet_kernel,
+        observation_time_s=[0.0, 0.5, 1.5, 2.0],
+    )[0]
+    assert trace.true_mole_fraction == pytest.approx([0.0, 0.0, 1.0, 0.0])
+    assert trace.wind_direction_from_deg == pytest.approx([270.0] * 4)
+    assert seen_axes and all(value == pytest.approx(90.0) for value in seen_axes)
+
+
+def test_source_history_requires_explicit_shutdown_and_wind_coverage():
+    with pytest.raises(ValueError, match="explicit zero rate"):
+        SourceHistory([0.0, 1.0], [1.0, 1.0]).to_packets()
+    source = SourceHistory([0.0, 1.0], [1.0, 0.0])
+    wind = WindHistory([0.0, 0.25], [1.0, 1.0], [270.0, 270.0])
+    with pytest.raises(ValueError, match="cover every source packet release"):
+        replay_fixed_receptors_with_source_history(
+            source, wind, [FixedReceptor("east", 1.0, 0.0, 0.0)],
+            lambda packet, age, x, y, z: 0.0,
         )

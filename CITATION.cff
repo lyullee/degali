@@ -7,17 +7,18 @@ type: software
 # block at all, which Zenodo rejects; it is the kind of thing that is found at
 # the moment of publication rather than before it.
 #
-# The version-specific DOI below was reserved in the DEGALI Zenodo record.
-# The stable concept DOI for all versions is 10.5281/zenodo.22646258.
+# The v0.3.0 DOI was reserved before packaging so the tagged source and the
+# immutable Zenodo archive carry the same identifier. The version-neutral
+# concept DOI for all DEGALI releases is 10.5281/zenodo.22646258.
 authors:
   - family-names: "Lee"
     given-names: "Ugwiyeon"
     affiliation: "Korea Gas Safety Corporation"
     # orcid: "https://orcid.org/0000-0000-0000-0000"
 
-version: "0.2.0"
-doi: "10.5281/zenodo.23105451"
-date-released: 2026-10-03
+version: "0.3.0"
+doi: "10.5281/zenodo.23256538"
+date-released: 2026-10-09
 
 abstract: >-
   DEGALI (Dense Gas Dispersion for Liquid Hydrogen) reimplements DEGADIS 2.1,

@@ -170,6 +170,99 @@ class AxisAlignedCuboid:
             (self.x_max_m, self.y_max_m, self.z_max_m),
         )
 
+    def horizontal_corners(self) -> tuple[tuple[float, float], ...]:
+        """Return the four global horizontal footprint corners."""
+        return (
+            (self.x_min_m, self.y_min_m), (self.x_min_m, self.y_max_m),
+            (self.x_max_m, self.y_min_m), (self.x_max_m, self.y_max_m),
+        )
+
+
+@dataclass(frozen=True)
+class OrientedCuboid:
+    """A rectangular global-footprint cuboid with a declared long-axis bearing.
+
+    ``long_axis_bearing_deg`` is a mathematical *to* direction measured
+    counter-clockwise from global ``+x``. This convention is deliberately
+    separate from meteorological wind-*from* bearing. It preserves an actual
+    facility orientation before projection into the local wind plane; it does
+    not introduce a 3-D wake or bypass closure.
+    """
+
+    center_m: tuple[float, float]
+    length_m: float
+    width_m: float
+    z_min_m: float
+    z_max_m: float
+    long_axis_bearing_deg: float
+    label: str = "oriented_cuboid"
+
+    def __post_init__(self) -> None:
+        if len(self.center_m) != 2 or not all(math.isfinite(float(value)) for value in self.center_m):
+            raise ValueError("oriented cuboid center_m must contain two finite coordinates")
+        values = {
+            "length_m": self.length_m,
+            "width_m": self.width_m,
+            "z_min_m": self.z_min_m,
+            "z_max_m": self.z_max_m,
+            "long_axis_bearing_deg": self.long_axis_bearing_deg,
+        }
+        if not all(math.isfinite(float(value)) for value in values.values()):
+            raise ValueError("oriented cuboid dimensions and bearing must be finite")
+        if self.length_m <= 0.0 or self.width_m <= 0.0 or self.z_min_m >= self.z_max_m:
+            raise ValueError("an oriented cuboid requires positive extent on every axis")
+        if not isinstance(self.label, str) or not self.label.strip():
+            raise ValueError("obstacle label must be a non-empty string")
+        object.__setattr__(self, "center_m", (float(self.center_m[0]), float(self.center_m[1])))
+        object.__setattr__(self, "long_axis_bearing_deg", float(self.long_axis_bearing_deg) % 360.0)
+
+    @property
+    def long_axis_direction_rad(self) -> float:
+        return math.radians(self.long_axis_bearing_deg)
+
+    def horizontal_corners(self) -> tuple[tuple[float, float], ...]:
+        """Return the four actual global footprint corners in stable order."""
+        ex, ey = math.cos(self.long_axis_direction_rad), math.sin(self.long_axis_direction_rad)
+        nx, ny = -ey, ex
+        half_length, half_width = 0.5 * self.length_m, 0.5 * self.width_m
+        return tuple(
+            (
+                self.center_m[0] + along * ex + across * nx,
+                self.center_m[1] + along * ey + across * ny,
+            )
+            for along, across in (
+                (-half_length, -half_width), (-half_length, half_width),
+                (half_length, -half_width), (half_length, half_width),
+            )
+        )
+
+    def segment_intersection(
+        self, start_m: Sequence[float], end_m: Sequence[float]
+    ) -> SegmentIntersection | None:
+        """Intersect a global segment after an exact horizontal rotation."""
+        start, end = _point3(start_m, name="segment start"), _point3(end_m, name="segment end")
+        ex, ey = math.cos(self.long_axis_direction_rad), math.sin(self.long_axis_direction_rad)
+        nx, ny = -ey, ex
+
+        def local(point: np.ndarray) -> tuple[float, float, float]:
+            dx, dy = point[0] - self.center_m[0], point[1] - self.center_m[1]
+            return dx * ex + dy * ey, dx * nx + dy * ny, float(point[2])
+
+        hit = _segment_aabb_intersection(
+            local(start), local(end),
+            (-0.5 * self.length_m, -0.5 * self.width_m, self.z_min_m),
+            (0.5 * self.length_m, 0.5 * self.width_m, self.z_max_m),
+        )
+        if hit is None:
+            return None
+        delta = end - start
+        entry = start + hit.entry_fraction * delta
+        exit_ = start + hit.exit_fraction * delta
+        return SegmentIntersection(
+            hit.entry_fraction, hit.exit_fraction,
+            tuple(float(value) for value in entry), tuple(float(value) for value in exit_),
+        )
+
 
 @dataclass(frozen=True)
 class TransverseWall:
@@ -292,6 +385,8 @@ def _obstacle_metadata(obstacle: _SegmentObstacle) -> tuple[str, bool, float | N
         )
     if isinstance(obstacle, AxisAlignedCuboid):
         return "axis_aligned_cuboid", False, None
+    if isinstance(obstacle, OrientedCuboid):
+        return "oriented_cuboid", False, None
     return type(obstacle).__name__, False, None
 
 

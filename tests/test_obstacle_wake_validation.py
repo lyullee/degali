@@ -3,6 +3,8 @@ import math
 import pytest
 
 from degali.addons.obstacle_wake_validation import (
+    DenseGasFenceObservation,
+    NeutralObstacleWakePoint,
     pair_smedis_fence_trials,
     read_aij_case_h,
 )
@@ -36,6 +38,18 @@ def test_local_aij_case_h_intake_preserves_measurements_and_scope(tmp_path):
     assert not benchmark.quantitative_wake_prediction_allowed
 
 
+def test_local_aij_case_h_intake_preserves_signed_background_subtracted_mean(tmp_path):
+    path = tmp_path / "RS_caseH.csv"
+    _write_case_h(path, [
+        "1,0,0,0.1,1,0,0,0.1,0.1,0.1,0.015,-0.211,3",
+    ])
+
+    benchmark = read_aij_case_h(path)
+
+    assert benchmark.points[0].concentration_ppm == pytest.approx(-0.211)
+    assert benchmark.points[0].concentration_measured
+
+
 def test_local_aij_case_h_intake_rejects_schema_or_duplicate_identifier(tmp_path):
     incomplete = tmp_path / "incomplete.csv"
     incomplete.write_text("No.,x (m)\n1,0\n", encoding="utf-8")
@@ -47,6 +61,68 @@ def test_local_aij_case_h_intake_rejects_schema_or_duplicate_identifier(tmp_path
     _write_case_h(duplicate, [row, row])
     with pytest.raises(ValueError, match="identifiers must be unique"):
         read_aij_case_h(duplicate)
+
+
+def test_obstacle_observation_boundaries_reject_corrupt_physical_values():
+    with pytest.raises(ValueError, match="kinetic energy cannot be negative"):
+        NeutralObstacleWakePoint(
+            identifier=1,
+            x_m=0.0,
+            y_m=0.0,
+            z_m=0.1,
+            velocity_m_s=(1.0, 0.0, 0.0),
+            velocity_rms_m_s=(0.1, 0.1, 0.1),
+            turbulent_kinetic_energy_m2_s2=-1.0e-6,
+            concentration_ppm=20.0,
+            concentration_rms_ppm=3.0,
+        )
+
+    with pytest.raises(ValueError, match="concentration_rms_ppm cannot be negative"):
+        NeutralObstacleWakePoint(
+            identifier=1,
+            x_m=0.0,
+            y_m=0.0,
+            z_m=0.1,
+            velocity_m_s=(1.0, 0.0, 0.0),
+            velocity_rms_m_s=(0.1, 0.1, 0.1),
+            turbulent_kinetic_energy_m2_s2=0.015,
+            concentration_ppm=1.0,
+            concentration_rms_ppm=-3.0,
+        )
+
+    with pytest.raises(ValueError, match="fence_std_percent cannot be negative"):
+        DenseGasFenceObservation(
+            position_m=(1.0, 0.0, 0.05),
+            control_percent=1.0,
+            fence_percent=0.5,
+            control_std_percent=0.1,
+            fence_std_percent=-0.01,
+        )
+
+
+def test_obstacle_observation_boundaries_keep_missing_nan_values_as_missing():
+    point = NeutralObstacleWakePoint(
+        identifier=1,
+        x_m=0.0,
+        y_m=0.0,
+        z_m=0.1,
+        velocity_m_s=(math.nan, 0.0, 0.0),
+        velocity_rms_m_s=(0.1, math.nan, 0.1),
+        turbulent_kinetic_energy_m2_s2=math.nan,
+        concentration_ppm=math.nan,
+        concentration_rms_ppm=math.nan,
+    )
+    assert not point.velocity_measured
+    assert not point.concentration_measured
+
+    observation = DenseGasFenceObservation(
+        position_m=(1.0, 0.0, 0.05),
+        control_percent=1.0,
+        fence_percent=0.5,
+        control_std_percent=math.nan,
+        fence_std_percent=math.nan,
+    )
+    assert observation.fence_to_control_ratio == pytest.approx(0.5)
 
 
 def _fence_trial(path, *, fences, rate=0.11, sensors=None):

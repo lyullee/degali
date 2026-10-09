@@ -5,6 +5,7 @@ import pytest
 
 from degali.addons.site_geometry import (
     AxisAlignedCuboid,
+    OrientedCuboid,
     TransverseWall,
     WindFrame,
     screen_trajectory,
@@ -53,6 +54,23 @@ def test_clear_centreline_is_not_mistaken_for_an_obstacle_wake_prediction():
     assert result.free_plume_prediction_applicable
     assert not result.requires_obstacle_resolved_model
     assert "does not prove" in result.notes[1]
+
+
+def test_oriented_cuboid_uses_its_actual_rotated_footprint_for_contact():
+    building = OrientedCuboid(
+        center_m=(2.0, 0.0), length_m=4.0, width_m=2.0,
+        z_min_m=0.0, z_max_m=3.0, long_axis_bearing_deg=90.0,
+        label="north-south-skid",
+    )
+    result = screen_trajectory(
+        [(0.0, 0.0, 1.0), (4.0, 0.0, 1.0)], [building]
+    )
+
+    assert len(result.encounters) == 1
+    hit = result.encounters[0]
+    assert hit.obstacle_type == "oriented_cuboid"
+    assert hit.entry_point_m == pytest.approx((1.0, 0.0, 1.0))
+    assert hit.exit_point_m == pytest.approx((3.0, 0.0, 1.0))
 
 
 def test_unbounded_wall_is_screened_in_an_arbitrarily_rotated_wind_frame():

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .axisymmetric_jet import AxisymmetricJetSource
     from .cryogenic_air import MultiphaseHydrogenSourcePlane
+    from .lh2_property_table import LH2SaturationTable
 
 
 @dataclass(frozen=True)
@@ -80,6 +81,100 @@ class HomogeneousEquilibriumHydrogenSource:
         return self.phase_plane.formation_distance
 
 
+def _flash_property(
+    props_si,
+    table: "LH2SaturationTable | None",
+    output: str,
+    key1: str,
+    value1: float,
+    key2: str,
+    value2: float,
+    fluid: str,
+) -> float:
+    """Use a bounded table where it owns a saturated-H2 query."""
+    if table is not None:
+        value = table.props(output, key1, value1, key2, value2, fluid)
+        if value is not None:
+            return float(value)
+    return float(props_si(output, key1, value1, key2, value2, fluid))
+
+
+def direct_vapour_jet_source_from_flash(
+    source: FlashingHydrogenDropletSource,
+    *,
+    ambient_temperature: float = 295.0,
+    theta: float = 0.0,
+    x: float = 0.0,
+    y: float = 0.0,
+) -> "AxisymmetricJetSource":
+    """Return the gas-only branch of a post-flash two-phase source.
+
+    Vapour and droplets leave the flash plane at the common velocity already
+    fixed by the pressure-thrust balance.  This adapter preserves that
+    velocity and the vapour mass flux, while assigning only the equilibrium
+    vapour density and enthalpy to the gas branch.  It does *not* evaporate or
+    discard the residual liquid; that inventory must be routed separately.
+
+    For a two-phase flash, the vapour properties are the saturated-vapour
+    properties at the declared ambient pressure.  For an all-vapour flash,
+    the source's recorded post-flash state is retained.  No concentration
+    observation or dispersion coefficient enters the construction.
+    """
+    from CoolProp.CoolProp import PropsSI
+
+    from .axisymmetric_jet import AxisymmetricJetSource, SourceEnthalpyBoundary
+
+    for name, value in {
+        "ambient_temperature": ambient_temperature,
+        "x": x,
+        "y": y,
+        "theta": theta,
+    }.items():
+        if not math.isfinite(value):
+            raise ValueError(f"{name} must be finite")
+    if ambient_temperature <= 0.0:
+        raise ValueError("ambient_temperature must be positive")
+    if source.vapour_mass_flow <= 0.0:
+        raise ValueError("post-flash source contains no direct vapour")
+    if source.postflash_velocity <= 0.0:
+        raise ValueError("post-flash velocity must be positive")
+
+    species = source.hydrogen_species
+    if source.postflash_quality < 1.0 - 1.0e-10:
+        density = float(PropsSI(
+            "D", "P", source.ambient_pressure, "Q", 1, species
+        ))
+        enthalpy = float(PropsSI(
+            "H", "P", source.ambient_pressure, "Q", 1, species
+        ))
+    else:
+        density = float(source.postflash_density)
+        enthalpy = float(source.postflash_specific_enthalpy)
+    reference_enthalpy = float(PropsSI(
+        "H", "T|gas", ambient_temperature, "P", source.ambient_pressure,
+        species,
+    ))
+    diameter = math.sqrt(
+        4.0 * source.vapour_mass_flow
+        / (math.pi * density * source.postflash_velocity)
+    )
+    return AxisymmetricJetSource(
+        diameter=diameter,
+        velocity=source.postflash_velocity,
+        density=density,
+        temperature=source.postflash_temperature,
+        theta=theta,
+        x=x,
+        y=y,
+        enthalpy_boundary=SourceEnthalpyBoundary(
+            specific_enthalpy=enthalpy - reference_enthalpy,
+            ambient_temperature=ambient_temperature,
+            hydrogen_species=species,
+            hydrogen_reference_enthalpy=reference_enthalpy,
+        ),
+    )
+
+
 def flashing_hydrogen_droplet_source(
     *,
     mass_flow: float,
@@ -91,6 +186,7 @@ def flashing_hydrogen_droplet_source(
     upstream_quality: float | None = None,
     droplet_size_coefficient: float = 15.0,
     hydrogen_species: str = "Hydrogen",
+    property_table: "LH2SaturationTable | None" = None,
 ) -> FlashingHydrogenDropletSource:
     """Expand a measured LH2 pipe state and retain its residual liquid.
 
@@ -100,9 +196,19 @@ def flashing_hydrogen_droplet_source(
     diameter uses its Appleton/Wheatley correlation: the shattered-jet branch
     has the recommended ``C_ds=15`` and the documented 10--20 uncertainty
     range.  This coefficient is a published atomisation input and is never
-    inferred from a dispersion observation.
+    inferred from a dispersion observation. ``property_table`` may accelerate
+    repeated *saturated-H2* lookups only; unsupported or out-of-range queries
+    remain explicit rather than being extrapolated.
     """
     from CoolProp.CoolProp import PropsSI
+
+    def prop(
+        output: str, key1: str, value1: float, key2: str, value2: float,
+        fluid: str = hydrogen_species,
+    ) -> float:
+        return _flash_property(
+            PropsSI, property_table, output, key1, value1, key2, value2, fluid
+        )
 
     if hydrogen_species not in {
         "Hydrogen", "ParaHydrogen", "OrthoHydrogen",
@@ -131,21 +237,17 @@ def flashing_hydrogen_droplet_source(
 
     if upstream_quality is None:
         upstream_quality_value = None
-        upstream_density = float(PropsSI(
-            "D", "T", upstream_temperature, "P", upstream_pressure,
-            hydrogen_species,
-        ))
-        upstream_enthalpy = float(PropsSI(
-            "H", "T", upstream_temperature, "P", upstream_pressure,
-            hydrogen_species,
-        ))
+        upstream_density = prop(
+            "D", "T", upstream_temperature, "P", upstream_pressure
+        )
+        upstream_enthalpy = prop(
+            "H", "T", upstream_temperature, "P", upstream_pressure
+        )
     else:
         upstream_quality_value = float(upstream_quality)
         if not 0.0 <= upstream_quality_value <= 1.0:
             raise ValueError("upstream quality must lie between zero and one")
-        saturation_pressure = float(PropsSI(
-            "P", "T", upstream_temperature, "Q", 0, hydrogen_species
-        ))
+        saturation_pressure = prop("P", "T", upstream_temperature, "Q", 0.0)
         if not math.isclose(
             upstream_pressure, saturation_pressure, rel_tol=0.05
         ):
@@ -153,14 +255,12 @@ def flashing_hydrogen_droplet_source(
                 "a supplied upstream quality requires a saturation-consistent "
                 "temperature and pressure"
             )
-        upstream_density = float(PropsSI(
-            "D", "T", upstream_temperature, "Q", upstream_quality_value,
-            hydrogen_species,
-        ))
-        upstream_enthalpy = float(PropsSI(
-            "H", "T", upstream_temperature, "Q", upstream_quality_value,
-            hydrogen_species,
-        ))
+        upstream_density = prop(
+            "D", "T", upstream_temperature, "Q", upstream_quality_value
+        )
+        upstream_enthalpy = prop(
+            "H", "T", upstream_temperature, "Q", upstream_quality_value
+        )
 
     area = math.pi * orifice_diameter**2 / 4.0
     upstream_velocity = mass_flow / (upstream_density * area)
@@ -172,12 +272,8 @@ def flashing_hydrogen_droplet_source(
     total_specific_energy = upstream_enthalpy + 0.5 * upstream_velocity**2
     postflash_enthalpy = total_specific_energy - 0.5 * postflash_velocity**2
 
-    liquid_enthalpy = float(PropsSI(
-        "H", "P", ambient_pressure, "Q", 0, hydrogen_species
-    ))
-    vapour_enthalpy = float(PropsSI(
-        "H", "P", ambient_pressure, "Q", 1, hydrogen_species
-    ))
+    liquid_enthalpy = prop("H", "P", ambient_pressure, "Q", 0.0)
+    vapour_enthalpy = prop("H", "P", ambient_pressure, "Q", 1.0)
     raw_quality = (
         (postflash_enthalpy - liquid_enthalpy)
         / (vapour_enthalpy - liquid_enthalpy)
@@ -199,15 +295,9 @@ def flashing_hydrogen_droplet_source(
         )
     postflash_quality = min(max(raw_quality, 0.0), 1.0)
     if 0.0 < raw_quality < 1.0:
-        postflash_temperature = float(PropsSI(
-            "T", "P", ambient_pressure, "Q", 0, hydrogen_species
-        ))
-        liquid_density = float(PropsSI(
-            "D", "P", ambient_pressure, "Q", 0, hydrogen_species
-        ))
-        vapour_density = float(PropsSI(
-            "D", "P", ambient_pressure, "Q", 1, hydrogen_species
-        ))
+        postflash_temperature = prop("T", "P", ambient_pressure, "Q", 0.0)
+        liquid_density = prop("D", "P", ambient_pressure, "Q", 0.0)
+        vapour_density = prop("D", "P", ambient_pressure, "Q", 1.0)
         postflash_density = 1.0 / (
             (1.0 - postflash_quality) / liquid_density
             + postflash_quality / vapour_density
@@ -221,22 +311,16 @@ def flashing_hydrogen_droplet_source(
             "D", "P", ambient_pressure, "H", postflash_enthalpy,
             hydrogen_species,
         ))
-        liquid_density = float(PropsSI(
-            "D", "P", ambient_pressure, "Q", 0, hydrogen_species
-        ))
+        liquid_density = prop("D", "P", ambient_pressure, "Q", 0.0)
 
     postflash_area = mass_flow / (postflash_density * postflash_velocity)
     postflash_diameter = math.sqrt(4.0 * postflash_area / math.pi)
     liquid_mass_flow = mass_flow * (1.0 - postflash_quality)
     vapour_mass_flow = mass_flow * postflash_quality
 
-    liquid_viscosity = float(PropsSI(
-        "V", "P", ambient_pressure, "Q", 0, hydrogen_species
-    ))
+    liquid_viscosity = prop("V", "P", ambient_pressure, "Q", 0.0)
     liquid_kinematic_viscosity = liquid_viscosity / liquid_density
-    surface_tension = float(PropsSI(
-        "I", "P", ambient_pressure, "Q", 0, hydrogen_species
-    ))
+    surface_tension = prop("I", "P", ambient_pressure, "Q", 0.0)
     radius = 0.5 * postflash_diameter
     jet_reynolds = (
         2.0 * radius * postflash_velocity / liquid_kinematic_viscosity
@@ -245,9 +329,7 @@ def flashing_hydrogen_droplet_source(
         2.0 * radius * postflash_velocity**2 * liquid_density
         / surface_tension
     )
-    normal_boiling_temperature = float(PropsSI(
-        "T", "P", ambient_pressure, "Q", 0, hydrogen_species
-    ))
+    normal_boiling_temperature = prop("T", "P", ambient_pressure, "Q", 0.0)
     non_shattered = (
         jet_weber < jet_reynolds ** (-0.45) * 1.0e6
         and upstream_temperature < 1.11 * normal_boiling_temperature
@@ -262,9 +344,9 @@ def flashing_hydrogen_droplet_source(
                 1.0 + 3.0 * math.sqrt(jet_weber) / jet_reynolds
             )
         else:
-            ambient_density = float(PropsSI(
+            ambient_density = prop(
                 "D", "T", ambient_temperature, "P", ambient_pressure, "Air"
-            ))
+            )
             droplet_diameter = (
                 droplet_size_coefficient * surface_tension
                 / (postflash_velocity**2 * ambient_density)

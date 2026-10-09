@@ -571,10 +571,10 @@ import degali
 print(degali.__version__)
 ```
 
-DEGALI 0.2.0 버전 DOI는
-[`10.5281/zenodo.23105451`](https://doi.org/10.5281/zenodo.23105451)이며,
-모든 버전을 묶는 개념 DOI는
-[`10.5281/zenodo.22646258`](https://doi.org/10.5281/zenodo.22646258)이다.
+DEGALI에 대해 현재 공개되어 확인되는 DOI는
+[`10.5281/zenodo.22646258`](https://doi.org/10.5281/zenodo.22646258) 개념
+DOI이다. 현재 `0.3.0` 소스 스냅샷의 버전별 DOI는
+[`10.5281/zenodo.23256538`](https://doi.org/10.5281/zenodo.23256538)이다.
 
 ## 12. 추가 기술문서
 
@@ -724,3 +724,21 @@ footprint 면적입니다. 모델이 impact 점 몇 개에서 이 면적을 임�
 `ConstantHeatFluxSurface`를 사용할 수 있습니다. 기본 증발 운동량 closure는
 제한 검증에 사용된 `zero_radial_momentum_vapor`이며,
 `liquid_velocity_carryoff`는 명시적 구조 민감도 옵션입니다.
+
+## 결합 과도 다상 경로
+
+위 제트/퍼프와 액적/rainout/풀 경로를 같은 플래시 입력과 방출 시계로
+실행하려면 `run_lh2_coupled_transient_research()`를 사용합니다. 이 함수는
+기상분을 유한 제트–플룸–퍼프로, 액상분을 액적–동적 풀로 동시에 보냅니다.
+총 수소 수지는 `result.conservative`로 확인할 수 있습니다.
+
+비행 중 증발과 풀 증발은 질량·시간 구간까지 계산되지만, 현재는 검증된
+대기 유입 온도·상향 운동량·초기 농도분포가 없습니다. 따라서 이 질량은
+노즐 제트에 임의로 합치지 않고 `result.atmospheric_sources`에
+`dispersion_model=None`인 소스 항으로 남습니다. 이때
+`result.atmospherically_complete`는 `False`이고,
+`result.unresolved_atmospheric_mass_kg`가 아직 대기 분산 계산으로 이어지지
+않은 질량을 정량화합니다. 질량보존 통과는 현장 농도 검증을 뜻하지 않습니다.
+
+전체 인터페이스와 예시는 [결합 과도 LH2 연구 경로](docs/lh2-coupled-transient.md)를
+참조하십시오. 이 경로는 `DEGADIS_21` 원본 호환 모델을 변경하지 않습니다.

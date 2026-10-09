@@ -45,6 +45,27 @@ python tools/audit_ffi_test6_transient_receptors.py wind.csv `
 `6 s` is an upper-bound response case based on the reported “less than 6 s”
 specification, not a fitted value. Run `--response-t90 0` as the no-lag bound.
 
+The replay writes `degali.ffi-test6-transient-receptor-execution.v1`. It keeps
+the supplied history out of the JSON, records its SHA-256 and row count, and
+stores one compact row per reference receptor with true/indicated window
+mean and maximum. Reported peaks remain explicit lower bounds; over-range
+observations are retained as `null` rather than treated as exact values.
+The input record also preserves sample count, time range, interval range,
+uniform-sampling diagnostic and wind-speed range. These are diagnostics only;
+the replay does not promote an irregular or sparse history automatically.
+The replay is an observation operator only: `promotion_allowed` and
+`validation_qualified` are always `false`.
+
+The saved artifact can be checked without rerunning the plume calculation:
+
+```powershell
+python tools/audit_ffi_test6_transient_receptors.py --verify artifacts/test6-replay.json
+```
+
+Verification rechecks the wind-history SHA, exact CSV contract, reference
+`conditions.csv`/`sensors.csv` digests, receptor identity and compact-window
+invariants. It is integrity-only and reports `report_recomputed=false`.
+
 ## What this does not solve
 
 This is not a transient dispersion solver. It does not add plume storage,

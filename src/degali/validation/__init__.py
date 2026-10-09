@@ -30,6 +30,16 @@ from .model_comparison import (
     compare_models,
 )
 from .screening_gate import ScreeningDecision, evaluate_screening
+from .ffi_source_state import (
+    FFI_SOURCE_STATE_ENVELOPE_SCHEMA,
+    FfiResidualRow,
+    FfiSourceState,
+    FfiSourceStateEnvelope,
+    FfiSourceStateEnvelopeCase,
+    ffi_reference_provenance,
+    ffi_source_state_envelope_report,
+    run_ffi_source_state_envelope,
+)
 from .flashing import FlashResult, equivalent_source, plume_half_width
 from .integration import (
     BranchDecision,
@@ -137,4 +147,8 @@ __all__ = [
     "Statistics", "statistics", "table",
     "ComparisonCase", "ModelPrediction", "ModelComparisonReport", "compare_models",
     "ScreeningDecision", "evaluate_screening",
+    "FFI_SOURCE_STATE_ENVELOPE_SCHEMA", "FfiSourceState", "FfiResidualRow",
+    "FfiSourceStateEnvelopeCase", "FfiSourceStateEnvelope",
+    "ffi_reference_provenance", "run_ffi_source_state_envelope",
+    "ffi_source_state_envelope_report",
 ]

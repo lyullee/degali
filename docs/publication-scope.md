@@ -19,6 +19,8 @@ the source-distribution manifest:
 - all external experimental data, including reduced or selected copies;
 - third-party journal and technical-report PDFs;
 - solver checkpoints, partial JSON files and large numerical field dumps;
+- local `outputs/` and `artifacts/` derivatives, including workbook/PDF-based
+  audit products and transient benchmark results;
 - virtual environments, caches, compiled Fortran objects and scratch clones;
 - machine-specific regression XML and temporary probes.
 

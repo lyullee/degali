@@ -5,8 +5,8 @@
 > 7개 시험의 새 적분·38/17/41 비교를 재현했습니다. 최신 열분포 후보는
 > 온도 개선에도 농도 편향·높이 오차가 악화되어 기본판으로 승격하지 않습니다.
 > 최종 134개 파일/환경 검증 통과. 아래의 진행 중 표시는 과거 기록입니다.
-> [1차 결과](docs/stage1-results-2026-09-06.md) ·
-> [실행 방법](docs/stage1-reproduction-2026-09-06.md).
+> [1차 결과\](stage1-results-2026-09-06.md) ·
+> [실행 방법\](stage1-reproduction-2026-09-06.md).
 > 전체 설비 검증/미완성 난류 연구가 끝난 것은 아니며 2차를 자동 시작하지 않습니다.
 
 > **05:47 KST (2026-09-06):** source matching now includes prescribed Q,
@@ -15,7 +15,7 @@
 > unchanged original6targets (max1.489e-11);105 hashes match. The failed old
 > fixed-center large-Q case is preserved. Actual turbulence inputs, pressure/
 > full stress transport and measured-distance validation remain open. Full
-> non-slow regression is running. [Latest results](docs/finite-tke-transport-results.md).
+> non-slow regression is running. [Latest results\](finite-tke-transport-results.md).
 
 > **05:00 KST (2026-09-06):** opt-in finite-TKE transport now separates shear
 > production, turbulent storage and thermal dissipation. All retained equations
@@ -23,7 +23,7 @@
 > Its synthetic closure inputs FAIL physical gates and are NOT adopted. Full
 > non-slow425 passed; no observed accuracy/default claim. Initial source energy
 > reallocation also passes its manufactured audit (05:10);4 later source tests
-> passed separately. Next physical initial/boundary closure. [Results](docs/finite-tke-transport-results.md).
+> passed separately. Next physical initial/boundary closure. [Results\](finite-tke-transport-results.md).
 > Older blocks below are historical snapshots.
 
 > **04:30 completion checkpoint (2026-09-06):** the re-solved exact-geometry
@@ -31,7 +31,7 @@
 > NEW-direction actual energy checks. All7 initial shear/TKE bound diagnoses
 > resolve (minimum flux10.51–11.72% of mean axial KE). These are NOT a physical
 > circulation/TKE closure or observed accuracy. Next: finite-TKE modal operator.
-> [Current results](docs/exact-geometry-and-tke-results.md). All audits below ended.
+> [Current results\](exact-geometry-and-tke-results.md). All audits below ended.
 
 > **Latest numerical/physics result (2026-09-06,04:10 KST):** coherent exact
 > width/wind geometry passes independent actual full-energy differences
@@ -39,13 +39,13 @@
 > A coefficient-free shear-realizability bound requires TKE flux at least
 >10.56% of mean axial KE for the prior aligned trial10 witness; it is not
 > an actual k value or a closure. Non-slow403 passed; no new field/default claim.
-> [Current results](docs/exact-geometry-and-tke-results.md). Older blocks are history.
+> [Current results\](exact-geometry-and-tke-results.md). Older blocks are history.
 
 > **Latest overnight result (2026-09-06):** a direction-preserving conservative
 > circulation witness passes trial10's local checks, but is NOT a turbulence
 > closure. Independent energy differences expose cancellation and width/wind
 > derivative consistency problems; all failures retained. No observed score or
-> default change. Full non-slow385 passed. [Current results](docs/aligned-flux-and-energy-conditioning-results.md).
+> default change. Full non-slow385 passed. [Current results\](aligned-flux-and-energy-conditioning-results.md).
 > Entries below are historical snapshots, including then-running audits.
 
 > **Overnight conservative-flow research (2026-09-06):** local initialization
@@ -54,15 +54,15 @@
 > flux FEASIBILITY witness reaches H2/heat/P3.54/4.00/3.02% at the failed
 > field, but is not a stable closure or observed validation. Independent
 > phase-volume verification is running. Non-slow371 passed.
-> [Current results](docs/conservative-flux-witness-results.md),
-> [seven-case segments](docs/enriched-short-segment-results.md).
+> [Current results\](conservative-flux-witness-results.md),
+> [seven-case segments\](enriched-short-segment-results.md).
 
 > **Seven-case initialization extension (2026-09-06):** all7 now pass
 > independent local conservation, H2/heat/momentum boundary and sampled
 > positive-viscosity gates.85 frozen hashes match; non-slow355 passed.
 > Guarded downstream segments are under test: trial10 leaves the heat
 > boundary gate at about0.44 mm, so local success is NOT downstream success.
-> No new field score or default change. [Results](docs/coupled-initialization-extension-results.md).
+> No new field score or default change. [Results\](coupled-initialization-extension-results.md).
 > Older entries below are historical snapshots.
 
 > **Simultaneous shape/transport initialization (2026-09-06):** both
@@ -71,21 +71,21 @@
 > H2/heat defects fall16.88/16.54% to3.24/2.30%; trial11's negative inferred
 > viscosity becomes positive. No new physical coefficient, downstream run,
 > observed score or default promotion. Non-slow342 passed.
-> [Results](docs/coupled-shape-initialization-results.md). Other five not rerun.
+> [Results\](coupled-shape-initialization-results.md). Other five not rerun.
 
 > **Coupled enriched-shape transport (2026-09-05):** gauge-free modal rates
 > now reconstruct mass flux, stress work and scalar transport on the new shapes.
 > Numerics pass7/7 with separately verified fine mixing input, but no case
 > passes adoption gates: renewed boundary defects and negative inferred viscosity in
 > two cases. No downstream run, observed accuracy or default change.
-> Non-slow:336 passed. [Results](docs/enriched-shape-transport-results.md).
+> Non-slow:336 passed. [Results\](enriched-shape-transport-results.md).
 
 > **Conservative edge refit (2026-09-05):** all seven fixed-transport square
 > sections now pass independent conservation, edge and physical checks.
 > Face/ray phase splitting and constrained refitting reduce internal H2/heat
 > edge defects from12–25% to0.95–3.63%. Earlier failures remain unchanged.
 > This is not new downstream transport or measured accuracy; defaults are
-> unchanged. Non-slow:324 passed. [Results](docs/edge-conservative-refit-results.md).
+> unchanged. Non-slow:324 passed. [Results\](edge-conservative-refit-results.md).
 
 > **Square edge-profile enrichment (2026-09-05):** new two-dimensional H2/heat
 > shapes reduce both fixed-transport edge defects below5% in3/7 cases, but
@@ -93,28 +93,28 @@
 > Phase-cell diagnosis identifies under-resolved optimization integrals;
 > further angular error control and conservative refitting are required.
 > Non-slow:317 passed. Defaults/field scores remain unchanged.
-> [Results](docs/edge-profile-enrichment-results.md).
+> [Results\](edge-profile-enrichment-results.md).
 
 > **Ambient-reservoir thermal moments (2026-09-05):** an explicit inflow-energy
 > boundary now closes a research weak thermal-width transport law. Seven
 > millimetre-scale segments have passed conservation/convergence checks,
 > including separate adaptive verification of one failed fixed-step case.
 > Pointwise species/heat edge defects remain 12–25%; no field accuracy or
-> default promotion is claimed. [Results](docs/reservoir-thermal-moment-results.md).
+> default promotion is claimed. [Results\](reservoir-thermal-moment-results.md).
 
 > **Shear/thermal closure screen (2026-09-05):** reduced shear-work and heat
 > moment coupling are implemented. Numerical checks pass 7/7, but unity scalar
 > diffusion plus immediate shear heating fails the independent heat balance
 > in all seven cases. The finite cold edge does not match the existing ambient
 > energy-inflow condition. No new downstream run, accuracy claim or default.
-> [Results and next boundary correction](docs/shear-thermal-compatibility-results.md).
+> [Results and next boundary correction\](shear-thermal-compatibility-results.md).
 
 > **Conservative transverse mixing (2026-09-05):** the independent thermal
 > section now reconstructs transverse mass/species transport conditional on
 > its unknown width rate. All seven boundaries pass independent flux-change
 > verification; no width rate or thermal/species diffusivity ratio is fitted
 > or selected. This is not yet a closed downstream thermal ODE.
-> [Results and remaining closure](docs/transverse-conservative-mixing-results.md).
+> [Results and remaining closure\](transverse-conservative-mixing-results.md).
 
 > **Thermal-shape transport operators (2026-09-05):** mean enthalpy second
 > moments, moving/curved free-section balances and specific-enthalpy-gradient
@@ -122,45 +122,45 @@
 > quadrature needs separate error control. Adaptive repair passes all seven
 > independent fixed-section checks. These are operators, not a closed
 > downstream width law or a new accuracy claim. Defaults remain unchanged.
-> [Results and remaining physics](docs/thermal-moment-operator-results.md).
+> [Results and remaining physics\](thermal-moment-operator-results.md).
 
 > **Buoyancy-constrained thermal width (2026-09-05):** a separate enthalpy
 > width now matches the five fluxes AND the near-field buoyancy moment in all
 > seven boundary cases. Maximum centre-temperature mismatch is 0.581 K;
 > independent adaptive integration also passes. This is boundary-only:
 > downstream width transport and experimental error reduction are not yet
-> demonstrated. [Results](docs/buoyancy-constrained-enthalpy-width-results.md).
+> demonstrated. [Results\](buoyancy-constrained-enthalpy-width-results.md).
 
 > **Enthalpy-profile screen (2026-09-05):** an opt-in Gaussian volumetric
 > enthalpy profile now has its own conservative inverse and actual-density
 > buoyancy integration. All seven cases and 38 arcs / 17 profiles completed.
 > On the same 41 thermocouples, minimum-temperature MAE falls about 5%, but
 > median-temperature error and centre-height MAE worsen. Do not promote;
-> defaults remain unchanged. [Results](docs/gaussian-enthalpy-profile-results.md).
+> defaults remain unchanged. [Results\](gaussian-enthalpy-profile-results.md).
 
 > **Ambient consistency audit (2026-09-05):** an opt-in research correction
 > removes a spurious cold/enthalpy offset from hydrogen-free ambient gas.
 > The full 38-arc/17-profile comparison shows only small concentration/height
 > changes and does not pass the joint promotion gate. No default was changed.
-> See [ambient and downstream profile results](docs/phase-ambient-consistency-results.md).
+> See [ambient and downstream profile results\](phase-ambient-consistency-results.md).
 
 > **Latest research correction (2026-09-05):** the measured-LH2 HEM branch now
 > carries pipe kinetic energy and condensed-phase source enthalpy into the
 > conservative near field. This removes an independently detected ~6% energy
 > transfer defect; it is not a claim of ~6% better experimental accuracy.
 > The default DEGADIS path is unchanged. See
-> [EOS/source-ledger results](docs/preslhy-source-eos-ledger-results.md).
+> [EOS/source-ledger results\](preslhy-source-eos-ledger-results.md).
 
 > **Liquid-hydrogen model update (2026-09-03):** the flashing-source mass,
 > enthalpy and total momentum are now conserved into the jet ODE, and the
 > public pressure-jet path is allowed to detach from the ground. Current
 > validation numbers and the remaining condensed-air limitation are in
-> [`docs/lh2-model-improvements-2026-09-03.md`](docs/lh2-model-improvements-2026-09-03.md).
+> [`docs/lh2-model-improvements-2026-09-03.md`\](lh2-model-improvements-2026-09-03.md).
 > The current crosswind research extension now has a 7/7 conservative
 > independent-energy boundary and downstream ODE result. It improves
 > concentration variance, FAC2 and vertical width, but worsens mean bias and
 > centre-height error, so it remains research-only. See
-> [`docs/preslhy-independent-energy-interface-results.md`](docs/preslhy-independent-energy-interface-results.md).
+> [`docs/preslhy-independent-energy-interface-results.md`\](preslhy-independent-energy-interface-results.md).
 > A common sensor-height ground-image fit confirms that the geometry rejection
 > is not an observation-operator artefact. A second published energy equation,
 > Li et al. (2026)'s enthalpy-only balance, changes centre MAE by less than
@@ -397,7 +397,7 @@ a pass. Anything depending on the cloud's shape rather than its centreline
 concentration — a flammable volume, an exposure at head height, a cloud over a
 bund wall — inherits both errors.
 
-See [docs/field-validation.md](docs/field-validation.md) for the method, what
+See [docs/field-validation.md\](field-validation.md) for the method, what
 had to be withdrawn, and why the way measurements are reduced matters more
 here than most modelling choices do.
 
@@ -445,7 +445,7 @@ Gaussian standard-deviation ratio is **1.033** over 23 well-constrained fits
 (median 1.042). An earlier 0.731 value mixed JETPLU's standard deviation with
 the measurement fit's e-folding width; the fit, reduced data and validation
 now use one explicit `exp(-0.5*((z-zc)/sigma_z)^2)` convention. See
-[docs/gaussian-width-convention.md](docs/gaussian-width-convention.md).
+[docs/gaussian-width-convention.md\](gaussian-width-convention.md).
 
 The quiescent near-nozzle regime now has its own conserved-energy
 axisymmetric model, checked against all nine Hecht--Panda simultaneous Raman
@@ -460,9 +460,9 @@ Against the final-journal fits its corrected-coverage errors are -24.86%,
 -15.79%, -21.38% and +24.56%, provisionally 4/4 but with two metrics very near
 the 25% boundary. It is the recommended dry-air axisymmetric research path,
 but is not substituted into the atmospheric calculation. See
-[docs/prereg-hecht-panda-hyram-closure.md](docs/prereg-hecht-panda-hyram-closure.md)
+[docs/prereg-hecht-panda-hyram-closure.md\](prereg-hecht-panda-hyram-closure.md)
 and the later
-[journal benchmark correction](docs/hecht-panda-journal-benchmark-correction.md).
+[journal benchmark correction\](hecht-panda-journal-benchmark-correction.md).
 
 The qualification matters: the 2019 article revised the two mass-fit labels
 from the 2017 conference version, and its aggregate plots list an otherwise
@@ -477,9 +477,9 @@ water freezing and latent heat. At 100% RH it overpredicts the Raman
 temperature-decay slope by 44.8%; at an unscored 40%-RH sensitivity all four
 slopes lie within 25%. Because the experiment reports condensed moisture but
 not laboratory RH, humidity is now an explicit input and no fitted default is
-claimed. See [docs/prereg-humid-air-frost-upper-bound.md](docs/prereg-humid-air-frost-upper-bound.md).
+claimed. See [docs/prereg-humid-air-frost-upper-bound.md\](prereg-humid-air-frost-upper-bound.md).
 The accepted dry-air thermodynamic correction is recorded separately in
-[docs/prereg-phase-temperature-dependent-enthalpy.md](docs/prereg-phase-temperature-dependent-enthalpy.md).
+[docs/prereg-phase-temperature-dependent-enthalpy.md\](prereg-phase-temperature-dependent-enthalpy.md).
 
 The accepted configuration is now available without assembling its internal
 flags by hand. The boundary below is the measured choked-gas plane; the helper
@@ -538,7 +538,7 @@ transfers the accepted N2/O2/H2O phase/enthalpy profile, and separately screens
 energy, H2 width and centre temperature. A failed screen blocks the downwind
 run. In the strict-grid representative test, the accepted 0.08 m handoff
 errors are 0.0585% energy, 1.57% H2 half-width and 0.94 K centre temperature; see
-[the handoff results](docs/conservative-nearfield-crosswind-handoff-results.md).
+[the handoff results\](conservative-nearfield-crosswind-handoff-results.md).
 Independent PRESLHY testing now covers seven momentum-dominated horizontal
 releases. The initial conserved coupling improves concentration variance but
 underpredicts vertical width; switching at the handoff to JETPLU's local
@@ -547,7 +547,7 @@ density-scaled shear entrainment repairs the mean width ratio from 0.710 to
 still fails the unchanged temperature/profile compatibility screen in two
 large-source trials. The coupled path therefore remains research-only and has
 not replaced `assess()`; see
-[the coupled PRESLHY results](docs/preslhy-coupled-crosswind-results.md).
+[the coupled PRESLHY results\](preslhy-coupled-crosswind-results.md).
 The coupled runner's default near-field endpoint is the strictly confirmed
 0.08 m boundary; longer or large-source domains require an explicit handoff
 distance and a passing audit.
@@ -563,65 +563,65 @@ argon preserves a provisional 4/4 and all conservation checks but slightly worse
 centreline-temperature error. A perfectly black `5B` plume envelope improves
 that thermal error by about 0.83 percentage point but slightly worsens both
 mass metrics; real absorption would be smaller. See
-[docs/prereg-argon-phase-completeness.md](docs/prereg-argon-phase-completeness.md)
-and [docs/prereg-radiation-upper-bound.md](docs/prereg-radiation-upper-bound.md).
+[docs/prereg-argon-phase-completeness.md\](prereg-argon-phase-completeness.md)
+and [docs/prereg-radiation-upper-bound.md\](prereg-radiation-upper-bound.md).
 The hydrogen spin-isomer caloric term is now explicit as well. A frozen
 `ParaHydrogen` run improved the two mass slopes but worsened the primary
 thermal-centreline error from -21.38% to -34.79%, so normal-hydrogen calorics
 remain the recommended baseline; see
-[docs/prereg-hydrogen-spin-isomer-enthalpy.md](docs/prereg-hydrogen-spin-isomer-enthalpy.md).
+[docs/prereg-hydrogen-spin-isomer-enthalpy.md\](prereg-hydrogen-spin-isomer-enthalpy.md).
 An independent thermal/species Gaussian profile with fixed published
 `Pr_t/Sc_t` was then combined with the accepted phase calorics and a four-flux
 boundary. It repairs both widths but worsens centreline temperature to
 -29.14%, so it remains a research closure rather than the default; see
-[docs/prereg-phase-two-scalar-four-flux.md](docs/prereg-phase-two-scalar-four-flux.md).
+[docs/prereg-phase-two-scalar-four-flux.md\](prereg-phase-two-scalar-four-flux.md).
 
 ELVHYS Tests 10/11 were screened from verified public raw files. They are not
 yet scoreable: no H2 mass-flow channel is present and the official sensor
 sheet and final D4.6 report disagree on nozzle elevation. See
-[docs/elvhys-tcs-audit.md](docs/elvhys-tcs-audit.md).
+[docs/elvhys-tcs-audit.md\](elvhys-tcs-audit.md).
 
 Wind-steered releases, where the exit velocity is comparable with the wind, are
 outside what a steady jet model can describe and the code says so. Getting
 there meant discarding two plausible fixes that made things worse and one
 comparison that was measuring the wrong quantity. See
-[docs/lh2-model-improvements-2026-09-03.md](docs/lh2-model-improvements-2026-09-03.md).
+[docs/lh2-model-improvements-2026-09-03.md\](lh2-model-improvements-2026-09-03.md).
 
 ## Documentation
 
 | | |
 |---|---|
-| [docs/status.md](docs/status.md) | where the project stands |
-| [docs/validation.md](docs/validation.md) | against the original Fortran |
-| [docs/field-validation.md](docs/field-validation.md) | against LNG and ammonia field trials |
-| [docs/data-inventory.md](docs/data-inventory.md) | every dataset, its format, and its traps |
-| [docs/data-exhaustion.md](docs/data-exhaustion.md) | what each dataset was asked, and what it refused |
-| [docs/lh2-plan.md](docs/lh2-plan.md) | liquid hydrogen: what can and cannot be attempted |
-| **[docs/DATA_AND_REPRODUCTION.md](docs/DATA_AND_REPRODUCTION.md)** | **start here: the data, how to reproduce every number, and a program audit** |
-| **[docs/lh2-model-improvements-2026-09-03.md](docs/lh2-model-improvements-2026-09-03.md)** | **liquid hydrogen: current conserved-source model, validation and remaining physics gaps** |
-| [docs/lh2-recomputed.md](docs/lh2-recomputed.md) | historical liquid-hydrogen reconstruction, superseded by the update above |
-| [docs/lh2-results.md](docs/lh2-results.md) | liquid hydrogen: what has been established |
-| [docs/lh2-datasets.md](docs/lh2-datasets.md) | the other LH₂ datasets, and why one of them is better |
-| [docs/elvhys-tcs-audit.md](docs/elvhys-tcs-audit.md) | verified ELVHYS Test-10/Test-11 reduction and why scoring stops |
-| [docs/data-request-elvhys-source.md](docs/data-request-elvhys-source.md) | exact ELVHYS source, geometry and instrument fields to request |
-| [docs/data-request-hecht-panda-humidity.md](docs/data-request-hecht-panda-humidity.md) | exact missing Raman humidity/raw-data fields and ready-to-send request |
-| [docs/prereg-hydrogen-spin-isomer-enthalpy.md](docs/prereg-hydrogen-spin-isomer-enthalpy.md) | rejected para-hydrogen caloric sensitivity |
-| [docs/prereg-preslhy-liquid-spin-source.md](docs/prereg-preslhy-liquid-spin-source.md) | spin-consistent measured-LH2 source and seven-trial para-hydrogen bound |
-| [docs/prereg-phase-two-scalar-four-flux.md](docs/prereg-phase-two-scalar-four-flux.md) | conservative radial heat/species closure and its rejection |
-| [docs/preslhy-coupled-crosswind-results.md](docs/preslhy-coupled-crosswind-results.md) | coupled LH2 field validation, accepted entrainment mechanism and remaining thermal-state gap |
-| [docs/liftoff.md](docs/liftoff.md) | buoyant lift-off: the closure, and its first validation |
-| [docs/integral-limits.md](docs/integral-limits.md) | the structural limits of an integral model for LH₂ |
-| **[docs/HANDOVER.md](docs/HANDOVER.md)** | **state, method, data, mistakes, and what to do next — start here** |
-| [docs/architecture.md](docs/architecture.md) | what is kept in Fortran shape, and why |
-| [docs/release-readiness.md](docs/release-readiness.md) | the checks applied before publishing |
-| [docs/references.md](docs/references.md) | every source, and whether it was read or quoted |
-| [docs/claim-grading.md](docs/claim-grading.md) | which results are deterministic, which statistical, which only directional |
-| [docs/prereg-entrainment.md](docs/prereg-entrainment.md) | a pre-registered test, and its falsification |
-| [docs/prereg-trajectory.md](docs/prereg-trajectory.md) | the trajectory fault, isolated to the buoyancy balance |
-| [docs/prereg-boussinesq.md](docs/prereg-boussinesq.md) | the correction the literature points at, and why it fails |
-| [docs/prereg-expanded-source.md](docs/prereg-expanded-source.md) | historical three-correction stage and four rejected alternatives |
-| [docs/local-validation.md](docs/local-validation.md) | measuring the sub-models separately: trajectory, spread, width |
-| [docs/hydrogen-audit.md](docs/hydrogen-audit.md) | what liquid hydrogen breaks in a model built for LNG |
+| [docs/status.md\](status.md) | where the project stands |
+| [docs/validation.md\](validation.md) | against the original Fortran |
+| [docs/field-validation.md\](field-validation.md) | against LNG and ammonia field trials |
+| [docs/data-inventory.md\](data-inventory.md) | every dataset, its format, and its traps |
+| [docs/data-exhaustion.md\](data-exhaustion.md) | what each dataset was asked, and what it refused |
+| [docs/lh2-plan.md\](lh2-plan.md) | liquid hydrogen: what can and cannot be attempted |
+| **[docs/DATA_AND_REPRODUCTION.md\](DATA_AND_REPRODUCTION.md)** | **start here: the data, how to reproduce every number, and a program audit** |
+| **[docs/lh2-model-improvements-2026-09-03.md\](lh2-model-improvements-2026-09-03.md)** | **liquid hydrogen: current conserved-source model, validation and remaining physics gaps** |
+| [docs/lh2-recomputed.md\](lh2-recomputed.md) | historical liquid-hydrogen reconstruction, superseded by the update above |
+| [docs/lh2-results.md\](lh2-results.md) | liquid hydrogen: what has been established |
+| [docs/lh2-datasets.md\](lh2-datasets.md) | the other LH₂ datasets, and why one of them is better |
+| [docs/elvhys-tcs-audit.md\](elvhys-tcs-audit.md) | verified ELVHYS Test-10/Test-11 reduction and why scoring stops |
+| [docs/data-request-elvhys-source.md\](data-request-elvhys-source.md) | exact ELVHYS source, geometry and instrument fields to request |
+| [docs/data-request-hecht-panda-humidity.md\](data-request-hecht-panda-humidity.md) | exact missing Raman humidity/raw-data fields and ready-to-send request |
+| [docs/prereg-hydrogen-spin-isomer-enthalpy.md\](prereg-hydrogen-spin-isomer-enthalpy.md) | rejected para-hydrogen caloric sensitivity |
+| [docs/prereg-preslhy-liquid-spin-source.md\](prereg-preslhy-liquid-spin-source.md) | spin-consistent measured-LH2 source and seven-trial para-hydrogen bound |
+| [docs/prereg-phase-two-scalar-four-flux.md\](prereg-phase-two-scalar-four-flux.md) | conservative radial heat/species closure and its rejection |
+| [docs/preslhy-coupled-crosswind-results.md\](preslhy-coupled-crosswind-results.md) | coupled LH2 field validation, accepted entrainment mechanism and remaining thermal-state gap |
+| [docs/liftoff.md\](liftoff.md) | buoyant lift-off: the closure, and its first validation |
+| [docs/integral-limits.md\](integral-limits.md) | the structural limits of an integral model for LH₂ |
+| **[docs/HANDOVER.md\](HANDOVER.md)** | **state, method, data, mistakes, and what to do next — start here** |
+| [docs/architecture.md\](architecture.md) | what is kept in Fortran shape, and why |
+| [docs/release-readiness.md\](release-readiness.md) | the checks applied before publishing |
+| [docs/references.md\](references.md) | every source, and whether it was read or quoted |
+| [docs/claim-grading.md\](claim-grading.md) | which results are deterministic, which statistical, which only directional |
+| [docs/prereg-entrainment.md\](prereg-entrainment.md) | a pre-registered test, and its falsification |
+| [docs/prereg-trajectory.md\](prereg-trajectory.md) | the trajectory fault, isolated to the buoyancy balance |
+| [docs/prereg-boussinesq.md\](prereg-boussinesq.md) | the correction the literature points at, and why it fails |
+| [docs/prereg-expanded-source.md\](prereg-expanded-source.md) | historical three-correction stage and four rejected alternatives |
+| [docs/local-validation.md\](local-validation.md) | measuring the sub-models separately: trajectory, spread, width |
+| [docs/hydrogen-audit.md\](hydrogen-audit.md) | what liquid hydrogen breaks in a model built for LNG |
 
 ## Two backends
 

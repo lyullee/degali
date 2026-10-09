@@ -15,6 +15,7 @@ import csv
 from dataclasses import dataclass
 import math
 from pathlib import Path
+import re
 
 import numpy as np
 
@@ -101,8 +102,17 @@ def read_elvhys_stream(path: str | Path, *, stream: str) -> ElvhysTimeSeries:
         [_float(row.get("Time"), column="Time", path=source) for row in rows],
         dtype=float,
     )
-    if time_s.size < 2 or not np.all(np.isfinite(time_s)):
+    finite_time = np.isfinite(time_s)
+    if np.count_nonzero(finite_time) < 2:
         raise ValueError(f"ELVHYS {source.name} needs at least two finite timestamps")
+    # Some 100 kHz/ignition exports reserve a fixed 800,000-row block and
+    # leave the unused tail blank.  Trim only that trailing blank block;
+    # a non-finite timestamp inside the recorded interval remains an error.
+    last_finite = int(np.flatnonzero(finite_time)[-1])
+    if not np.all(finite_time[: last_finite + 1]):
+        raise ValueError(f"ELVHYS {source.name} has a non-finite timestamp gap")
+    rows = rows[: last_finite + 1]
+    time_s = time_s[: last_finite + 1]
     if np.any(np.diff(time_s) < 0.0):
         raise ValueError(f"ELVHYS {source.name} timestamps must be nondecreasing")
     channels = {
@@ -117,10 +127,22 @@ def read_elvhys_stream(path: str | Path, *, stream: str) -> ElvhysTimeSeries:
 
 
 def _find_stream_file(root: Path, test_number: int, stream: str) -> Path | None:
-    prefix = f"ELE402HSE{test_number:03d}"
-    files = sorted(
-        path for path in root.rglob(f"{prefix}*{stream}*.csv") if path.is_file()
+    # The published archive contains both the normal ``HSE024`` spelling and
+    # zero-padded variants such as ``HSE0024``.  A prefix glob is unsafe here:
+    # asking for test 4 would also match ``HSE0043`` (test 43).  Parse the
+    # complete numeric token immediately before the stream marker instead.
+    pattern = re.compile(
+        rf"^ELE402HSE(?P<number>\d+){re.escape(stream)}.*\.csv$",
+        re.IGNORECASE,
     )
+    files = []
+    for path in root.rglob("*.csv"):
+        if not path.is_file():
+            continue
+        match = pattern.match(path.name)
+        if match and int(match.group("number")) == test_number:
+            files.append(path)
+    files.sort()
     if len(files) > 1:
         raise ValueError(
             f"ELVHYS test {test_number} has multiple {stream} files in {root}"
@@ -154,7 +176,16 @@ def read_elvhys_test(
             if name in normalized:
                 raise ValueError(f"ELVHYS test {test_number} lacks required {name} CSV")
             continue
-        streams[name] = read_elvhys_stream(file, stream=name)
+        try:
+            streams[name] = read_elvhys_stream(file, stream=name)
+        except ValueError as error:
+            # Passive/vertical and ignition exports sometimes include a
+            # placeholder FLMT file containing only ``Time``.  When flow is
+            # explicitly optional, treat that placeholder as absent; if the
+            # caller required FLMT, retain the hard failure.
+            if name not in normalized and "has no measurement channels" in str(error):
+                continue
+            raise
     return ElvhysTcsTest(test_number=test_number, streams=streams)
 
 

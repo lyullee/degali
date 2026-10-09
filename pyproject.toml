@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "degali"
-version = "0.2.0"
+version = "0.3.0"
 description = "Dense Gas Dispersion for Liquid Hydrogen, built on a verified DEGADIS 2.1 reimplementation"
 authors = [
   { name = "Ugwiyeon Lee" },
@@ -44,7 +44,8 @@ degali = "degali.cli:main"
 Source = "https://github.com/lyullee/degali"
 Documentation = "https://github.com/lyullee/degali#readme"
 Changelog = "https://github.com/lyullee/degali/blob/main/CHANGELOG.md"
-Archive = "https://doi.org/10.5281/zenodo.23105451"
+Archive = "https://doi.org/10.5281/zenodo.23256538"
+Concept-DOI = "https://doi.org/10.5281/zenodo.22646258"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/degali"]

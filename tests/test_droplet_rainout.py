@@ -50,6 +50,30 @@ def test_population_closes_mass_and_resolves_evaporation_and_rainout():
     )
 
 
+def test_optional_evaporation_trajectory_segments_close_each_class_vapour_ledger():
+    result = transport_droplet_population(
+        _boundary(), max_time_s=2.0, trajectory_segment_duration_s=0.05,
+    )
+
+    assert any(outcome.evaporation_segments for outcome in result.outcomes)
+    for outcome in result.outcomes:
+        segments = outcome.evaporation_segments
+        if outcome.airborne_vapour_mass_flow_kg_s > 0.0:
+            assert segments
+            assert sum(item.vapour_mass_fraction for item in segments) == pytest.approx(
+                outcome.airborne_vapour_mass_flow_kg_s
+                / outcome.inlet_mass_flow_kg_s,
+                abs=1.0e-12,
+            )
+            assert all(item.end_time_s > item.start_time_s for item in segments)
+            assert all(item.vapour_centroid_m[2] >= 0.0 for item in segments)
+
+    with pytest.raises(ValueError, match="trajectory_segment_duration_s"):
+        transport_droplet_population(
+            _boundary(), max_time_s=2.0, trajectory_segment_duration_s=0.0,
+        )
+
+
 def test_post_release_pool_preserves_end_to_end_hydrogen_inventory():
     droplets = transport_droplet_population(_boundary(), max_time_s=2.0)
     substrate = SolidSubstrate(

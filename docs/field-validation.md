@@ -8,6 +8,27 @@ covering the LNG spills (Burro, Coyote), pressurised ammonia jets (Desert
 Tortoise, FLADIS), nitrogen tetroxide (Eagle), Freon puffs (Thorney Island),
 propane jets (Lathen) and several wind-tunnel series.
 
+For the newer fixed-sensor LH2 validation boundary, a fingerprinted evidence
+record is not itself a score. Directly constructed datasets must keep the
+observations immutable and must agree with the evidence row count and CSV path;
+the score also verifies that its comparison right-hand side is exactly the
+observed dataset. A conditional score therefore always carries an explicit
+reason, and malformed hand-built records are withheld before serialization.
+
+Validation score records also preserve deterministic `gate_codes`. The matched
+model-comparison codes are carried through unchanged; validation adds
+`comparison_blocked`/`comparison_conditional`,
+`obstacle_validation_unsupported`, and explicit lower-bound states
+(`lower_bound_present`, `lower_bound_violated`, or `lower_bound_unresolved`).
+Only a score with no holdback receives `validation_qualified`. This lets batch
+and audit tooling branch on the same typed causes without parsing prose.
+
+Strict `degali.field-validation-input.v1` cases may also carry a
+`validation_manifest` path/SHA. When present, the case reader rechecks the
+manifest's five selected files and refuses any mismatch between its observed
+dataset/evidence IDs and the case's `validation_evidence`; the manifest does
+not change the score's qualification or promotion gates.
+
 ## How a trial becomes a deck
 
 `SPECS.DAT` maps almost one to one onto a DEGADIS input deck — wind speed and

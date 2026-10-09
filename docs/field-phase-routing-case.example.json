@@ -1,0 +1,111 @@
+{
+  "schema": "degali.field-phase-routing-screening-input.v1",
+  "lh2_validation_available": false,
+  "coordinate_reference": {
+    "coordinate_system_id": "site-grid-rev-A",
+    "origin_id": "release-area-grid-origin",
+    "x_axis_bearing_math_to_deg": 0.0,
+    "vertical_datum_id": "site-grade-datum",
+    "evidence_id": "site-layout-drawing-rev-A"
+  },
+  "conditional_review": {
+    "review_id": "field-review-A",
+    "reviewer_id": "process-safety-reviewer-01",
+    "reviewer_role": "process_safety_engineer",
+    "reviewed_at_utc": "2026-10-05T00:00:00Z",
+    "evidence_id": "field-screening-review-record-A",
+    "allowed_scope": "conditional_screening_only"
+  },
+  "scenario": {
+    "model_family": "degali",
+    "temporal_mode": "transient",
+    "source": {
+      "fluid": "lh2",
+      "location_m": [0.0, 0.0, 0.1],
+      "direction_m": [1.0, 0.0, 0.0],
+      "upstream_pressure": {"nominal": 400000.0, "unit": "Pa", "source": "PT-source-calibration-A"},
+      "upstream_temperature": {"nominal": 26.084, "unit": "K", "source": "TT-source-calibration-A"},
+      "pressure_reference": "absolute",
+      "mass_flow_kg_s": {"nominal": 0.265, "unit": "kg/s", "source": "FT-source-calibration-A"},
+      "opening_area_m2": {"nominal": 0.000176715, "unit": "m2", "source": "drawing-and-opening-review-A"},
+      "discharge_coefficient": {"nominal": 0.8, "unit": "1", "source": "Cd-basis-A"},
+      "liquid_fraction": {"nominal": 0.922, "unit": "1", "source": "phase-state-review-A"},
+      "liquid_fraction_basis": "upstream",
+      "flash_model": "homogeneous_equilibrium",
+      "duration_s": 2.0,
+      "metadata": {"release_boundary_evidence_id": "scenario-review-A"}
+    },
+    "weather": {
+      "speed_m_s": {"nominal": 5.0, "unit": "m/s", "source": "met-mast-A"},
+      "direction_deg": {"nominal": 270.0, "unit": "deg", "source": "met-mast-A"},
+      "direction_convention": "meteorological_from",
+      "stability": "neutral",
+      "reference_height_m": 10.0
+    },
+    "surface": {
+      "heat_transfer_w_m2_k": {"nominal": 10.0, "unit": "W/m2/K", "source": "surface-review-A"},
+      "surface_temperature_k": {"nominal": 293.15, "unit": "K", "source": "surface-review-A"},
+      "substrate": "concrete",
+      "evidence_id": "surface-review-A"
+    },
+    "sensor": {
+      "position_m": [1.0, 0.0, 0.5],
+      "response_time_s": {"nominal": 0.25, "unit": "s", "source": "H2-01-t90"},
+      "gain": {"nominal": 1.0, "unit": "1", "source": "H2-01-calibration"},
+      "bias_mole_fraction": {"nominal": 0.0, "unit": "mole_fraction", "source": "H2-01-calibration"},
+      "averaging_time_s": 0.1
+    }
+  },
+  "transport": {
+    "length_m": 4.0,
+    "height_m": 2.0,
+    "nx": 20,
+    "nz": 10,
+    "time_step_s": 0.005,
+    "duration_s": 10.0,
+    "diffusivity_m2_s": 0.5,
+    "gravitational_settling_m_s": 0.0,
+    "source_sigma_m": 0.2
+  },
+  "phase_routing_transport": {
+    "phase_routing": {
+      "post_release_duration_s": 8.0,
+      "puff_duration_s": 2.0,
+      "pool_area_m2": 0.5,
+      "pool_time_step_s": 0.5,
+      "evaporation_coefficient_m2_s": 1e-7,
+      "evidence_id": "phase-routing-assumptions-A",
+      "relative_humidity_pct": 0.0,
+      "roughness_m": 0.001,
+      "averaging_time_s": 60.0,
+      "wind_reference_height_m": 10.0,
+      "pool_model": "dynamic",
+      "gas_numerics": {
+        "maximum_nearfield_distance_m": 0.2,
+        "radial_points": 41,
+        "nearfield_maximum_step_m": 0.001,
+        "nearfield_relative_tolerance": 2e-6,
+        "crosswind_maximum_distance_m": 30.0,
+        "crosswind_maximum_step_m": 0.05,
+        "puff_time_step_s": 0.02
+      },
+      "liquid_numerics": {
+        "maximum_droplet_time_s": 2.0
+      },
+      "droplet_population": {
+        "classes": [
+          {"diameter_m": 0.0001, "mass_fraction": 0.25},
+          {"diameter_m": 0.001, "mass_fraction": 0.75}
+        ],
+        "evidence_id": "spray-population-review-A"
+      }
+    },
+    "pool_launch": {
+      "source_height_m": 0.0,
+      "closure_id": "ground_level_scalar",
+      "evidence_id": "pool-launch-review-A"
+    },
+    "pool_vertical_sigma_m": 0.2,
+    "table_nodes": 161
+  }
+}

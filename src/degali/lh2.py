@@ -541,6 +541,176 @@ class LH2RainoutPoolResearchResult:
         return "\n".join(lines)
 
 
+@dataclass(frozen=True)
+class LH2TransientAtmosphericSource:
+    """One hydrogen-vapour source term in the coupled transient ledger.
+
+    ``dispersion_model`` is ``None`` when the mass and timing are resolved but
+    a defensible atmospheric launch boundary is not.  This prevents in-flight
+    or pool evaporation from being silently injected into the nozzle jet.
+    """
+
+    mechanism: str
+    start_s: float
+    end_s: float
+    hydrogen_mass_kg: float
+    position_m: tuple[float, float, float] | None
+    effective_area_m2: float | None
+    dispersion_model: str | None
+    qualification: str
+
+    @property
+    def duration_s(self) -> float:
+        return self.end_s - self.start_s
+
+    @property
+    def mean_rate_kg_s(self) -> float:
+        return (
+            self.hydrogen_mass_kg / self.duration_s
+            if self.duration_s > 0.0 else 0.0
+        )
+
+    @property
+    def dispersed(self) -> bool:
+        return self.dispersion_model is not None
+
+
+@dataclass
+class LH2CoupledTransientResearchResult:
+    """Conservative multiphase routing with a finite jet/puff gas branch.
+
+    This object couples the existing flash, gas jet, yawed crosswind, native
+    puff, droplet transport and dynamic-pool calculations without changing
+    the frozen DEGADIS 2.1 compatibility path.  Conservation acceptance and
+    atmospheric completeness are deliberately separate claims.
+    """
+
+    source: object
+    direct_vapour_source: object | None
+    gas_dispersion: LH2FiniteReleaseResearchResult | None
+    phase_routing: LH2RainoutPoolResearchResult | None
+    atmospheric_sources: tuple[LH2TransientAtmosphericSource, ...]
+    release_duration_s: float
+    warnings: list[str] = field(default_factory=list)
+    model_id: str = "LH2_COUPLED_TRANSIENT"
+
+    @property
+    def released_hydrogen_mass_kg(self) -> float:
+        return float(self.source.mass_flow * self.release_duration_s)
+
+    @property
+    def direct_vapour_mass_kg(self) -> float:
+        return float(self.source.vapour_mass_flow * self.release_duration_s)
+
+    @property
+    def airborne_droplet_vapour_mass_kg(self) -> float:
+        if self.phase_routing is None:
+            return 0.0
+        return float(
+            self.phase_routing.pool_coupling.airborne_droplet_vapour_mass_kg
+        )
+
+    @property
+    def pool_vapour_mass_kg(self) -> float:
+        if self.phase_routing is None:
+            return 0.0
+        return float(self.phase_routing.pool_coupling.pool_vapour_mass_kg)
+
+    @property
+    def unresolved_atmospheric_mass_kg(self) -> float:
+        return float(sum(
+            item.hydrogen_mass_kg
+            for item in self.atmospheric_sources
+            if not item.dispersed
+        ))
+
+    @property
+    def hydrogen_mass_residual_kg(self) -> float:
+        if self.phase_routing is None:
+            accounted = self.direct_vapour_mass_kg
+        else:
+            pool = self.phase_routing.pool_coupling
+            accounted = (
+                pool.direct_vapour_mass_kg
+                + pool.airborne_droplet_vapour_mass_kg
+                + pool.airborne_liquid_mass_kg
+                + pool.pool_vapour_mass_kg
+                + pool.remaining_pool_liquid_mass_kg
+                + pool.escaped_pool_liquid_mass_kg
+            )
+        return self.released_hydrogen_mass_kg - accounted
+
+    @property
+    def conservative(self) -> bool:
+        scale = max(self.released_hydrogen_mass_kg, 1.0)
+        phase_ok = (
+            self.phase_routing is None or self.phase_routing.accepted
+        )
+        gas_ok = self.gas_dispersion is None or (
+            self.gas_dispersion.handoff.status == "transition_ready"
+            and self.gas_dispersion.puff.maximum_relative_mass_residual
+            < 1.0e-10
+            and self.gas_dispersion.puff.maximum_relative_hydrogen_residual
+            < 1.0e-10
+            and abs(
+                self.gas_dispersion.handoff.hydrogen_mass_kg
+                - self.direct_vapour_mass_kg
+            ) <= 1.0e-8 * scale
+        )
+        return (
+            phase_ok and gas_ok
+            and abs(self.hydrogen_mass_residual_kg) <= 1.0e-10 * scale
+        )
+
+    @property
+    def atmospherically_complete(self) -> bool:
+        return self.unresolved_atmospheric_mass_kg <= (
+            1.0e-12 * max(self.released_hydrogen_mass_kg, 1.0)
+        )
+
+    @property
+    def accepted(self) -> bool:
+        gas_scope_ok = (
+            self.gas_dispersion is None or self.gas_dispersion.accepted
+        )
+        return self.conservative and gas_scope_ok
+
+    def report(self) -> str:
+        lines = [
+            "LH2 coupled transient multiphase research path",
+            f"  model id                    : {self.model_id}",
+            f"  released hydrogen           : {self.released_hydrogen_mass_kg:.6g} kg",
+            f"  direct flash vapour         : {self.direct_vapour_mass_kg:.6g} kg",
+            f"  in-flight droplet vapour    : "
+            f"{self.airborne_droplet_vapour_mass_kg:.6g} kg",
+            f"  pool vapour                 : {self.pool_vapour_mass_kg:.6g} kg",
+            f"  unresolved atmospheric mass : "
+            f"{self.unresolved_atmospheric_mass_kg:.6g} kg",
+            f"  end-to-end H2 residual      : "
+            f"{self.hydrogen_mass_residual_kg:.3e} kg",
+            f"  conservation screen         : "
+            f"{'pass' if self.conservative else 'fail'}",
+            f"  atmospheric completion      : "
+            f"{'complete' if self.atmospherically_complete else 'partial'}",
+            f"  applicability screen        : "
+            f"{'pass' if self.accepted else 'conditional'}",
+        ]
+        unresolved = [
+            item for item in self.atmospheric_sources if not item.dispersed
+        ]
+        if unresolved:
+            lines.append("  unresolved source boundaries:")
+            lines += [
+                f"    - {item.mechanism}: {item.hydrogen_mass_kg:.6g} kg; "
+                f"{item.qualification}"
+                for item in unresolved
+            ]
+        if self.warnings:
+            lines.append("  qualifications:")
+            lines += [f"    - {warning}" for warning in self.warnings]
+        return "\n".join(lines)
+
+
 def audit_lh2_independent_energy_interface(
     near_field: LH2NearFieldResearchResult,
     crosswind_model: "JetPlume",
@@ -1437,6 +1607,7 @@ def run_lh2_yawed_crosswind_research(
     wind: float,
     wind_angle: float = 0.0,
     release_angle: float = 0.0,
+    source_lateral_offset_m: float = 0.0,
     height: float | None = None,
     ambient_temperature: float = 295.0,
     ambient_pressure: float = 101325.0,
@@ -1469,7 +1640,8 @@ def run_lh2_yawed_crosswind_research(
     from .core.jetplume import J_UC
     from .validation.nearfield import hydrogen_gas_jet
 
-    values = (wind, wind_angle, release_angle, roughness, averaging,
+    values = (wind, wind_angle, release_angle, source_lateral_offset_m,
+              roughness, averaging,
               wind_reference_height, maximum_nearfield_distance,
               nearfield_maximum_step, maximum_distance, maximum_step)
     if not all(math.isfinite(float(value)) for value in values):
@@ -1556,6 +1728,7 @@ def run_lh2_yawed_crosswind_research(
     # ``source_plane.x`` is the only global offset carried by the axisymmetric
     # source; source_plane.y is the release elevation, represented by state Z.
     state[7] += source_plane.x
+    state[8] += source_lateral_offset_m
     result = model.solve(
         state, distance=maximum_distance, step=maximum_step,
         maximum_material_time_s=stop_after_material_time_s,
@@ -1578,6 +1751,7 @@ def run_lh2_finite_release_research(
     wind: float,
     wind_angle: float = 0.0,
     release_angle: float = 0.0,
+    source_lateral_offset_m: float = 0.0,
     height: float | None = None,
     upstream_material_time_s: float = 0.0,
     ambient_temperature: float = 295.0,
@@ -1627,6 +1801,8 @@ def run_lh2_finite_release_research(
     }.items():
         if not math.isfinite(value) or value <= 0.0:
             raise ValueError(f"{name} must be finite and positive")
+    if not math.isfinite(source_lateral_offset_m):
+        raise ValueError("source_lateral_offset_m must be finite")
     if (
         not math.isfinite(upstream_material_time_s)
         or upstream_material_time_s < 0.0
@@ -1696,6 +1872,7 @@ def run_lh2_finite_release_research(
                 wind=wind,
                 wind_angle=wind_angle,
                 release_angle=release_angle,
+                source_lateral_offset_m=source_lateral_offset_m,
                 height=height,
                 ambient_temperature=ambient_temperature,
                 ambient_pressure=ambient_pressure,
@@ -1817,6 +1994,7 @@ def run_lh2_rainout_pool_research(
     schmidt_number: float = 0.7,
     droplet_classes=None,
     maximum_droplet_time_s: float = 120.0,
+    trajectory_segment_duration_s: float | None = None,
     latent_heat_j_kg: float = 4.46e5,
     flight_environmental_heat_input_w: float | None = None,
     pool_model: str = "dynamic",
@@ -1945,7 +2123,8 @@ def run_lh2_rainout_pool_research(
         environmental_heat_input_w=flight_environmental_heat_input_w,
     )
     droplets = transport_droplet_population(
-        boundary, max_time_s=maximum_droplet_time_s
+        boundary, max_time_s=maximum_droplet_time_s,
+        trajectory_segment_duration_s=trajectory_segment_duration_s,
     )
     if pool_model == "dynamic":
         source_radius = math.sqrt(pool_area_m2 / math.pi)
@@ -2026,6 +2205,286 @@ def run_lh2_rainout_pool_research(
         )
     return LH2RainoutPoolResearchResult(
         source=source, droplets=droplets, pool_coupling=pool,
+        warnings=warnings,
+    )
+
+
+def _pool_vapour_source_terms(
+    phase_routing: LH2RainoutPoolResearchResult,
+) -> tuple[LH2TransientAtmosphericSource, ...]:
+    """Convert a fixed or dynamic pool history to conservative source bins."""
+    pool = phase_routing.pool_coupling.pool
+    if pool is None or not pool.steps:
+        return ()
+    centre = phase_routing.droplets.impact_centroid_m
+    position = (
+        None if centre is None else
+        (float(centre[0]), float(centre[1]), 0.0)
+    )
+    fixed_area = getattr(pool, "area_m2", None)
+    previous_time = 0.0
+    previous_mass = 0.0
+    terms = []
+    for step in pool.steps:
+        elapsed = float(step.elapsed_s)
+        cumulative = float(step.evaporated_mass_kg)
+        mass = max(cumulative - previous_mass, 0.0)
+        duration = elapsed - previous_time
+        if mass > 0.0 and duration > 0.0:
+            area = (
+                float(step.wet_area_m2)
+                if hasattr(step, "wet_area_m2") else
+                float(fixed_area) if fixed_area is not None else None
+            )
+            terms.append(LH2TransientAtmosphericSource(
+                mechanism="pool_evaporation",
+                start_s=previous_time,
+                end_s=elapsed,
+                hydrogen_mass_kg=mass,
+                position_m=position,
+                effective_area_m2=area,
+                dispersion_model=None,
+                qualification=(
+                    "mass, time bin and footprint are resolved; a pool-vapour "
+                    "launch temperature, vertical momentum and atmospheric "
+                    "profile closure have not been prescribed"
+                ),
+            ))
+        previous_time = elapsed
+        previous_mass = cumulative
+    return tuple(terms)
+
+
+def run_lh2_coupled_transient_research(
+    source,
+    *,
+    release_duration_s: float,
+    post_release_duration_s: float,
+    puff_duration_s: float,
+    release_position_m: tuple[float, float, float],
+    release_azimuth_rad: float,
+    release_elevation_rad: float,
+    wind_speed_m_s: float,
+    wind_to_angle_rad: float,
+    evaporation_coefficient_m2_s: float,
+    pool_area_m2: float,
+    pool_time_step_s: float,
+    substrate,
+    ambient_temperature_k: float = 295.0,
+    ambient_pressure_pa: float = 101325.0,
+    relative_humidity: float = 0.0,
+    roughness: float = 0.001,
+    stability: str = "D",
+    averaging: float = 60.0,
+    wind_reference_height: float = 10.0,
+    puff_wind_history: "WindHistory | None" = None,
+    pool_model: str = "dynamic",
+    gas_model_options: dict[str, object] | None = None,
+    phase_model_options: dict[str, object] | None = None,
+    strict_scope: bool = False,
+) -> LH2CoupledTransientResearchResult:
+    """Route one post-flash LH2 release through all implemented branches.
+
+    Direct flash vapour is continued through the conserved near field, yawed
+    crosswind model and native finite puff.  Residual liquid is continued at
+    the same time through droplet flight, rainout and the selected concurrent
+    pool model.  In-flight and pool evaporation are emitted as time-resolved
+    atmospheric source terms, but are not assigned an invented launch
+    velocity or temperature.  Consequently the returned result can pass its
+    conservation screen while remaining atmospherically partial.
+
+    The gas branch currently supports a horizontal nozzle; a non-zero release
+    elevation is rejected when direct vapour exists.  Optional dictionaries
+    expose the established subordinate-model controls without duplicating
+    their full APIs.  Keys that define the shared scenario cannot be
+    overridden.
+    """
+    values = {
+        "release_duration_s": release_duration_s,
+        "post_release_duration_s": post_release_duration_s,
+        "puff_duration_s": puff_duration_s,
+        "wind_speed_m_s": wind_speed_m_s,
+        "evaporation_coefficient_m2_s": evaporation_coefficient_m2_s,
+        "pool_area_m2": pool_area_m2,
+        "pool_time_step_s": pool_time_step_s,
+        "ambient_temperature_k": ambient_temperature_k,
+        "ambient_pressure_pa": ambient_pressure_pa,
+    }
+    for name, value in values.items():
+        if not math.isfinite(value) or value <= 0.0:
+            raise ValueError(f"{name} must be finite and positive")
+    if not all(math.isfinite(value) for value in release_position_m):
+        raise ValueError("release_position_m must contain three finite values")
+    if len(release_position_m) != 3 or release_position_m[2] <= 0.0:
+        raise ValueError("release_position_m must be a positive-height 3-vector")
+    if not all(math.isfinite(value) for value in (
+        release_azimuth_rad, release_elevation_rad, wind_to_angle_rad,
+    )):
+        raise ValueError("release and wind angles must be finite")
+    if source.mass_flow <= 0.0:
+        raise ValueError("post-flash source mass flow must be positive")
+    if not math.isclose(
+        source.ambient_pressure, ambient_pressure_pa,
+        rel_tol=1.0e-10, abs_tol=1.0e-6,
+    ):
+        raise ValueError(
+            "post-flash source pressure must match ambient_pressure_pa"
+        )
+    partition_residual = (
+        source.mass_flow - source.vapour_mass_flow - source.liquid_mass_flow
+    )
+    if abs(partition_residual) > 1.0e-10 * max(source.mass_flow, 1.0):
+        raise ValueError("post-flash vapour/liquid partition does not close")
+    if (
+        source.vapour_mass_flow > 0.0
+        and not math.isclose(release_elevation_rad, 0.0, abs_tol=1.0e-12)
+    ):
+        raise ValueError(
+            "the coupled gas branch currently requires a horizontal release "
+            "(release_elevation_rad=0)"
+        )
+
+    gas_options = dict(gas_model_options or {})
+    phase_options = dict(phase_model_options or {})
+    gas_reserved = {
+        "source_duration_s", "puff_duration_s", "wind", "wind_angle",
+        "release_angle", "source_lateral_offset_m", "height",
+        "ambient_temperature", "ambient_pressure", "relative_humidity",
+        "roughness", "stability", "averaging", "wind_reference_height",
+        "puff_wind_history", "strict_scope",
+    }
+    phase_reserved = {
+        "release_duration_s", "post_release_duration_s",
+        "release_position_m", "release_azimuth_rad",
+        "release_elevation_rad", "wind_speed_m_s", "wind_to_angle_rad",
+        "evaporation_coefficient_m2_s", "pool_area_m2",
+        "pool_time_step_s", "substrate", "ambient_temperature_k",
+        "ambient_pressure_pa", "pool_model",
+    }
+    overlap = gas_reserved.intersection(gas_options)
+    if overlap:
+        raise ValueError(
+            "gas_model_options cannot override shared scenario keys: "
+            + ", ".join(sorted(overlap))
+        )
+    overlap = phase_reserved.intersection(phase_options)
+    if overlap:
+        raise ValueError(
+            "phase_model_options cannot override shared scenario keys: "
+            + ", ".join(sorted(overlap))
+        )
+
+    phase_routing = None
+    if source.liquid_mass_flow > 0.0:
+        phase_routing = run_lh2_rainout_pool_research(
+            source,
+            release_duration_s=release_duration_s,
+            post_release_duration_s=post_release_duration_s,
+            release_position_m=release_position_m,
+            release_azimuth_rad=release_azimuth_rad,
+            release_elevation_rad=release_elevation_rad,
+            wind_speed_m_s=wind_speed_m_s,
+            wind_to_angle_rad=wind_to_angle_rad,
+            evaporation_coefficient_m2_s=evaporation_coefficient_m2_s,
+            pool_area_m2=pool_area_m2,
+            pool_time_step_s=pool_time_step_s,
+            substrate=substrate,
+            ambient_temperature_k=ambient_temperature_k,
+            ambient_pressure_pa=ambient_pressure_pa,
+            pool_model=pool_model,
+            **phase_options,
+        )
+
+    direct_source = None
+    gas_dispersion = None
+    atmospheric_sources = []
+    if source.vapour_mass_flow > 0.0:
+        from .addons.lh2_droplets import direct_vapour_jet_source_from_flash
+
+        direct_source = direct_vapour_jet_source_from_flash(
+            source,
+            ambient_temperature=ambient_temperature_k,
+            theta=0.0,
+            x=float(release_position_m[0]),
+            y=float(release_position_m[2]),
+        )
+        gas_dispersion = run_lh2_finite_release_research(
+            direct_source,
+            source_duration_s=release_duration_s,
+            puff_duration_s=puff_duration_s,
+            wind=wind_speed_m_s,
+            wind_angle=wind_to_angle_rad,
+            release_angle=release_azimuth_rad,
+            source_lateral_offset_m=float(release_position_m[1]),
+            height=float(release_position_m[2]),
+            ambient_temperature=ambient_temperature_k,
+            ambient_pressure=ambient_pressure_pa,
+            relative_humidity=relative_humidity,
+            roughness=roughness,
+            stability=stability,
+            averaging=averaging,
+            wind_reference_height=wind_reference_height,
+            puff_wind_history=puff_wind_history,
+            strict_scope=strict_scope,
+            **gas_options,
+        )
+        atmospheric_sources.append(LH2TransientAtmosphericSource(
+            mechanism="direct_flash_vapour",
+            start_s=0.0,
+            end_s=release_duration_s,
+            hydrogen_mass_kg=(
+                source.vapour_mass_flow * release_duration_s
+            ),
+            position_m=tuple(float(value) for value in release_position_m),
+            effective_area_m2=direct_source.area,
+            dispersion_model="conserved_jet_yawed_crosswind_native_puff",
+            qualification=(
+                "direct equilibrium vapour branch at the pressure-thrust "
+                "flash-plane velocity"
+            ),
+        ))
+
+    warnings = [
+        "LH2_COUPLED_TRANSIENT is research-only and does not alter the frozen "
+        "DEGADIS_21 compatibility model",
+    ]
+    if phase_routing is not None:
+        airborne_mass = (
+            phase_routing.pool_coupling.airborne_droplet_vapour_mass_kg
+        )
+        if airborne_mass > 0.0:
+            terminal_time = max(
+                item.terminal_time_s for item in phase_routing.droplets.outcomes
+            )
+            atmospheric_sources.append(LH2TransientAtmosphericSource(
+                mechanism="in_flight_droplet_evaporation",
+                start_s=0.0,
+                end_s=release_duration_s + terminal_time,
+                hydrogen_mass_kg=airborne_mass,
+                position_m=None,
+                effective_area_m2=None,
+                dispersion_model=None,
+                qualification=(
+                    "total evaporated mass is resolved, but evaporation is "
+                    "distributed along droplet trajectories and has no single "
+                    "conservative jet/puff handoff"
+                ),
+            ))
+        atmospheric_sources.extend(_pool_vapour_source_terms(phase_routing))
+        warnings.extend(phase_routing.warnings)
+    if any(not item.dispersed for item in atmospheric_sources):
+        warnings.append(
+            "in-flight and pool vapour are retained as explicit atmospheric "
+            "source terms, not merged into the nozzle jet or assigned an "
+            "unvalidated dispersion closure"
+        )
+    return LH2CoupledTransientResearchResult(
+        source=source,
+        direct_vapour_source=direct_source,
+        gas_dispersion=gas_dispersion,
+        phase_routing=phase_routing,
+        atmospheric_sources=tuple(atmospheric_sources),
+        release_duration_s=release_duration_s,
         warnings=warnings,
     )
 

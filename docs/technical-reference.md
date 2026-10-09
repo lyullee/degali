@@ -4,7 +4,7 @@
 
 기술 기준일: 2026-09-07
 
-소프트웨어 버전: `0.2.0` (alpha research release)
+소프트웨어 버전: `0.3.0` (alpha research release)
 
 ## 1. 문서 목적과 판정 범위
 
