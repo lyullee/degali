@@ -35,7 +35,15 @@ dependencies = ["numpy>=1.23", "scipy>=1.10"]
 
 [project.optional-dependencies]
 coolprop = ["CoolProp>=6.4"]
-test = ["pytest>=7", "CoolProp>=6.4", "PyYAML>=6", "openpyxl>=3.1", "xlrd>=2.0.1"]
+test = [
+  "pytest>=7",
+  "CoolProp>=6.4",
+  "PyYAML>=6",
+  "openpyxl>=3.1",
+  "pypdf>=4",
+  "python-docx>=1.1",
+  "xlrd>=2.0.1",
+]
 
 [project.scripts]
 degali = "degali.cli:main"
