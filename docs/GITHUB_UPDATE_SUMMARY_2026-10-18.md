@@ -29,6 +29,8 @@ GitHub 공개 저장소에 고정한 기록이다. 실행 산출물 전체를 �
 - 풍향 9° 후보도 **26.23179%**로 기준보다 악화되어 거절했다.
 - 장애물 높이별 wall-flux 분기(`height_resolved_wall_flux=True`)도 **26.22907%**로
   기준보다 악화되어 거절했다. 보존성은 동일하게 통과했다.
+- 외부 원거리 entrainment을 제거한 후보(`exterior_entrainment_far_factor=0`)는
+  **31.45541%**로 악화되어, 단순 원거리 희석이 주된 잔차 원인이 아님을 확인했다.
 - 후속 600 s 물리 후보도 기록했다: 수직 diffusive-tail 확산계수 `0.20 m²/s`
   는 **30.98524%**, geometry-only 후류 상부분기(`wake_vertical_elevated_fraction=0.10`)
   는 **26.26299%**로 기준보다 악화되어 모두 거절했다. 두 후보 모두
