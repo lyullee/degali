@@ -1355,3 +1355,24 @@ no sensor-specific factor, hidden mass or timing-only promotion is adopted.
   direction candidates were rejected.  The next iteration must alter the
   conservative core's spatially varying vertical/crosswind transport, not add
   another global branch multiplier.
+
+## 2026-10-18 full-horizon follow-up checkpoint
+
+- A broad obstacle-wake meander candidate (`wake_length_m=150`,
+  `wake_base_width_m=30`, `wake_meander_strength=0.30`) scored **28.7741%**
+  in **27.59 s** and was rejected.
+- A two-layer vertical-shear candidate conserved species and mixture mass but
+  scored **60.7351%** in **24.35 s**; every registered height and distance
+  group degraded.  Global multilayer replacement is therefore not admissible.
+- Finite-prism continuous-release candidates scored **32.7954%** for 60 s and
+  **38.0132%** for 10 s, so release-duration broadening does not explain the
+  residual.
+- Increasing the common diffusive-tail extension from 10 m to 20 m produced
+  **26.15855%** in **29.21 s**, but degraded the 4.4 m and 150--300 m groups;
+  the 15 m trial scored **26.16564%** and was also rejected.  The best
+  individual remains 26.15868% and is not promoted.
+
+These complete-event tests further narrow the missing mechanism to a coupled
+near-field 3-D source/obstacle split and spatially varying core transport.
+No candidate in this checkpoint uses sensor-specific gains, and none is
+promoted unless the conservation, group, runtime and 10% gates all pass.
