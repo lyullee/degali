@@ -1414,3 +1414,10 @@ ledger, but explicitly discards vertical impulse and sensible enthalpy and
 does not couple lateral/top exports.  It therefore cannot pass the full
 3-D handoff gate.  A wide-inner packet without the named donor schema was
 also rejected at load time rather than silently reused.
+
+An explicit schema-conversion audit on the wide-inner packet then produced
+**50.4307%** when the full ambient normal flux was restored (the marked
+mixture ledger became **5.86e7 kg**) and **56.2863%** when only positive
+anomaly flux was retained.  Both conversions are rejected: the former
+double-counts ambient carrier mass and the latter omits the height-resolved
+energy and vertical-momentum coupling required by the receiver.
