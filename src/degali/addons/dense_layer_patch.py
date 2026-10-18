@@ -337,6 +337,8 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
                             dense_vertical_exponent=0.0,
                             vertical_grounding_exponent=0.0,
                             vertical_elevated_fraction=0.0,
+                            wake_vertical_elevated_fraction=0.0,
+                            wake_vertical_elevated_decay_m=80.0,
                             wall_overtop_exponent=0.0,
                             vertical_tail_scale_m=1.0,
                             vertical_tail_extension_m=0.0,
@@ -529,6 +531,12 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
         raise ValueError('vertical_grounding_exponent must be finite and non-negative')
     if not math.isfinite(vertical_elevated_fraction) or not 0.0 <= vertical_elevated_fraction <= 1.0:
         raise ValueError('vertical_elevated_fraction must lie in [0,1]')
+    if (not math.isfinite(wake_vertical_elevated_fraction)
+            or not 0.0 <= wake_vertical_elevated_fraction <= 1.0):
+        raise ValueError('wake_vertical_elevated_fraction must lie in [0,1]')
+    if (not math.isfinite(wake_vertical_elevated_decay_m)
+            or wake_vertical_elevated_decay_m <= 0.0):
+        raise ValueError('wake_vertical_elevated_decay_m must be positive and finite')
     if not math.isfinite(wall_overtop_exponent) or wall_overtop_exponent < 0.0:
         raise ValueError('wall_overtop_exponent must be finite and non-negative')
     for value,name in (
@@ -1612,6 +1620,27 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
             centre=.65*height
             sigma=np.maximum(.22*height,1.e-20)
         share=1.-(1.-float(vertical_elevated_fraction))*(1.-dynamic)
+        if wake_vertical_elevated_fraction > 0.0 and cavity_center_xy_m is not None:
+            # A geometry-only upper branch for the separated shear layer.  The
+            # weighting is zero in the cavity and is computed from the declared
+            # obstacle radius, wind-aligned coordinates and downstream decay;
+            # no sensor dose or sensor index enters this operator.
+            obs_dx=observation_column_points[:, 0]-float(cx)
+            obs_dy=observation_column_points[:, 1]-float(cy)
+            obs_along=(obs_dx*cavity_streamwise_unit[0]
+                       +obs_dy*cavity_streamwise_unit[1])
+            obs_cross=(obs_dx*cavity_crosswind_unit[0]
+                       +obs_dy*cavity_crosswind_unit[1])
+            downstream=np.maximum(obs_along-float(cavity_radius_m), 0.0)
+            cross=np.abs(obs_cross)
+            span=np.exp(-0.5*(cross/max(float(cavity_radius_m), 1.0e-30))**2)
+            wake_weight=np.clip(
+                downstream/max(float(wake_vertical_elevated_decay_m), 1.0e-30),
+                0.0, 1.0)*np.exp(
+                    -downstream/max(float(wake_vertical_elevated_decay_m), 1.0e-30))*span
+            wake_weight=np.where(cavity_weight>0.0, 0.0, wake_weight)
+            wake_share=float(wake_vertical_elevated_fraction)*wake_weight
+            share=1.0-(1.0-share)*(1.0-wake_share)
         if np.any(share>0.):
             branches.append(('marker_upper',core_volume*share,centre,sigma))
             core_volume=core_volume*(1.-share)
@@ -4479,6 +4508,8 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
             'dense_vertical_exponent':float(dense_vertical_exponent),
             'vertical_grounding_exponent':float(vertical_grounding_exponent),
             'vertical_elevated_fraction':float(vertical_elevated_fraction),
+            'wake_vertical_elevated_fraction':float(wake_vertical_elevated_fraction),
+            'wake_vertical_elevated_decay_m':float(wake_vertical_elevated_decay_m),
             'wall_overtop_exponent':float(wall_overtop_exponent),
             'wall_blockage_fraction':float(wall_blockage_fraction),
             'wall_overflow_capture_fraction':float(wall_overflow_capture_fraction),
