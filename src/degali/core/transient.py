@@ -84,6 +84,9 @@ class ObserverResult:
     transition: float = 0.0  #: distance at which the dense phase ended, m
     xv: float = 0.0
     n_dense: int = 0
+    failure_stage: str | None = None
+    failure_type: str | None = None
+    failure_message: str | None = None
 
 
 @dataclass
@@ -91,6 +94,11 @@ class TransientResult:
     """The whole transient run."""
 
     observers: list[ObserverResult]
+
+    @property
+    def failures(self) -> list[ObserverResult]:
+        """Observer runs that ended in a captured numerical/model failure."""
+        return [o for o in self.observers if o.failure_type is not None]
 
     @property
     def rows(self) -> np.ndarray:
@@ -413,18 +421,23 @@ class TransientRun:
                 index=i, t0=t0, tup=tup, tdown=tdown, xup=xup, xdown=xdown,
                 erate=0.0, b=0.0, sz0=0.0, cc0=0.0,
             )
+            stage = "collection"
             try:
                 layer, y, rlen = self._collect(t0, tup, tdown, xup, xdown)
                 if layer is None:
                     results.append(obs)
                     continue
+                stage = "plume_seed"
                 erate, b, sz0, sy0er, cc, rholay = self._seed_plume(
                     layer, y, rlen, tdown
                 )
                 obs.erate, obs.b, obs.sz0, obs.cc0 = erate, b, sz0, cc
+                stage = "downwind_profile"
                 self._profile(obs, erate, b, sz0, sy0er, cc, rholay)
-            except (RuntimeError, ValueError, OverflowError):
-                pass
+            except (RuntimeError, ValueError, OverflowError) as error:
+                obs.failure_stage = stage
+                obs.failure_type = type(error).__name__
+                obs.failure_message = str(error)
             results.append(obs)
         return TransientResult(observers=results)
 

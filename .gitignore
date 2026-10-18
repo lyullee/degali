@@ -16,6 +16,7 @@ dist/
 tmp/
 tmp_probe.py
 tmp_probe/
+.tmp/
 
 # Local validation products and controlled evidence derivatives.  These may
 # contain third-party workbook/PDF-derived tables and are intentionally kept
@@ -28,6 +29,20 @@ artifacts/
 # local.  The public repository contains provenance, methods and derived
 # validation summaries only; it does not redistribute these source materials.
 reference/
+# Keep the compact FFI case/sensor registry in source control; all downloaded
+# article/dataset files and extracted raw measurements remain ignored.
+!reference/
+reference/*
+!reference/hydrogen/
+reference/hydrogen/*
+!reference/hydrogen/open_channel_usn/
+reference/hydrogen/open_channel_usn/*
+!reference/hydrogen/open_channel_usn/obstacle_benchmark_registry_v1.json
+
+# User-held validation workbooks are inputs to local audits, not public release
+# artifacts.  Keep their derived JSON summaries and provenance records instead.
+*.xls
+*.xlsx
 
 # IDE and operating-system files
 .idea/

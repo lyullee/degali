@@ -90,3 +90,30 @@ velocity convention: positive values move scalar mass downward toward decreasing
 is a numerical transport sensitivity, not an inferred droplet or cold-cloud
 closure; phase-routed liquid and droplet paths retain their own evidence and
 applicability gates.
+
+### Machine-registered FFI O1 geometry
+
+The FFI resolved and hybrid runners now accept an exact geometry export rather
+than silently using the article-derived surrogate:
+
+```json
+{
+  "schema": "degali.ffi-obstacle-geometry.v1",
+  "registration_status": "machine_registered_exact",
+  "article_case": "O1",
+  "coordinate_frame": "ffi-open-channel-v1",
+  "obstacles": [{
+    "shape": "axis_aligned_cuboid", "label": "beam-A",
+    "x_min_m": 0.10, "x_max_m": 0.80,
+    "y_min_m": 2.10, "y_max_m": 2.50,
+    "z_min_m": 0.55, "z_max_m": 0.75
+  }]
+}
+```
+
+Every face is checked against the registered `0.9×5.8×0.8 m` channel; a
+conditional status, inferred blockage, unsupported shape or wrong coordinate
+frame is rejected before solving. Use `--obstacle-geometry-json` with
+`run_ffi_o1_resolved_buoyant_prefix.py` or
+`run_ffi_o1_hybrid_patch_prefix.py`. Geometry registration alone does not clear
+the common-clock, source-history or sensor-calibration gates.

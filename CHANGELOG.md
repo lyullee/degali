@@ -2,6 +2,615 @@
 
 ## Unreleased
 
+- Added a conservative split return from the local cavity reservoir to the
+  prompt core and reattached carrier.  A zero-split 600 s control reproduces
+  the prior 26.774194% TI021 result exactly.  Routing 20% to a 1.7 m
+  reattached branch gives a repeatable 26.683340% dose MAPE and improves all
+  four height and all three distance groups, with species closure at
+  2.01e-15 relative error.  It is retained as an internal candidate only:
+  the independent output-inclusive runtime is 32.36 s and the <=10% target is
+  still unmet.  Exact component-span optimization shows the existing branch
+  footprints cannot beat 24.907843% even with nonphysical event-wide 0--5x
+  amplitudes, so further branch-gain tuning is explicitly rejected.
+- Decoupled local cavity-reservoir transport from return to the main layer.
+  A zero return rate had incorrectly disabled advection of the conserved
+  local wake state.  The state can now remain visible and move independently,
+  and an opt-in height-based transport speed evaluates the neutral logarithmic
+  wind at a declared representative height.  Focused dense-layer and TI021
+  CLI tests pass.  Full-event screening improved the current physical
+  27.7596% dose MAPE to 26.7742% for the best all-group-nondegrading diagnostic,
+  but its timing pulse narrowed and its runtime exceeded the 30 s gate, so it
+  is not promoted and the 10% objective remains unmet.
+- Repaired three fixed-layer dense-patch integration defects.  The TI021
+  scorer's default conservative-volume mode can now dispatch to the
+  multilayer EOS occupancy observer; ambient entrainment enters the highest
+  materially occupied layer instead of silently diluting layer zero; and a
+  finite-prism handoff now initializes from the integral model's current
+  6.576 m height instead of incorrectly re-expanding the cloud to its original
+  13 m source height.  The corrected seven-layer, uniform-handoff 600 s run
+  passes conservation and completes in 24.76 s, but still scores 56.9504%
+  dose MAPE versus 27.7596% for the single-layer physical benchmark.  The
+  multilayer path therefore remains experimental and is not promoted; the
+  earlier 78.20--79.51% runs are retained only as pre-repair history.
+- Added `tools/compare_ffi_control_obstacle_delta.py`, a paired O1 diagnostic
+  that runs the same fast path for unobstructed control A and conditional O1
+  and compares the sensor-wise obstacle effect rather than hiding the error in
+  an absolute MAPE.  The 0.05 m, 24-receptor run completes in 11.96 s with
+  mass residual `1.21e-17 kg`, but predicted-versus-measured delta correlation
+  is `-0.098`; this confirms that the conditional beam surrogate does not yet
+  reproduce the observed obstacle pattern and remains non-promoting.
+- Added a fail-closed `degali.ffi-obstacle-geometry.v1` loader for a future
+  machine-registered O1 cuboid assembly. The resolved and hybrid runners now
+  accept `--obstacle-geometry-json`, validate the FFI frame and channel bounds,
+  and reject conditional or inferred geometry before mesh construction.
+- Added a runtime `FieldEvidenceManifest` gate to both O1 runners. Manifests
+  are re-read and SHA-verified before execution; `--require-quantitative-manifest`
+  refuses conditional clock/calibration packages instead of emitting a false
+  validation score.
+- Exposed resolved O1 SGS, scalar/thermal turbulent-diffusivity, open-boundary,
+  wall-boundary and source-closure controls in both the standalone and
+  fast→resolved→fast hybrid runners. Added a reproducible conditional closure
+  sensitivity report: matched 3 s tests show SGS/outlet/source perturbations
+  change RMSE by at most `8.35×10^-5 vol%-points`, so they do not explain the
+  observed underprediction; no variant is promoted while CAD, clock and
+  calibration gates remain unresolved. The hybrid patch smoke now records the
+  selected closure and preserves its mass/enthalpy/momentum interface ledger.
+- Added a fail-closed intake for the newly published H2SAFE indoor-release
+  dataset (DOI `10.7799/17118570`). The official 3.6 MB archive and HVAC
+  document are SHA-256 pinned, and every one of the 11 extracted CSV/STEP/STL
+  members is checked byte-for-byte against its ZIP member. The reader joins
+  case-insensitive trace IDs to the 24-sensor Lab-1 or 37-sensor Lab-2
+  coordinate registry, preserves native `#N/A` values, and rejects clock,
+  coordinate and row-shape drift. Direct ASCII-STL bounds checks also verify
+  that every published source and registry sensor lies in the same geometry
+  coordinate frame. STEP product semantics identify six Lab-1 and seven Lab-2
+  room/HVAC assemblies, but inlet/outlet opening faces and normals remain
+  unresolved rather than being guessed from names. The published vertical
+  axis is explicitly `Y`; the solver mapping is frozen as
+  `(x,y,z)=(X,Z,Y)` to prevent a silent height-axis swap. All five one-second helium
+  traces load:
+  Lab-1 has 24/24 finite channels; the four Lab-2 files expose 28, 32, 30 and
+  28 finite channels from their 32 trace columns. One hash-pinned evidence
+  manifest is emitted per event with source, forced-HVAC, STEP/STL obstacle,
+  receptor, sensor-registry, common-clock and operator identities. The public
+  package does not declare the concentration unit in its CSV headers, connect
+  relative trace seconds to the documented release clock, provide exact
+  duration bounds for minute-resolution Lab-2 clock text, provide event
+  calibration certificates, or define a helium-to-hydrogen equivalence
+  operator. Status is therefore
+  `conditional_component_evidence_helium_surrogate`; direct vol% scoring,
+  quantitative hydrogen/LH2 validation and model promotion are explicitly
+  disabled. The reproducible audit is in
+  `outputs/h2safe-evidence-audit-2026-10-11-v8/`. The typed HVAC inventory
+  closes the ten reported Lab-1 inlet/outlet boundaries to 0.052% relative
+  flow imbalance. Lab 2 preserves eight supply entries (1.42906 m3/s total)
+  and two recirculation fans, but fails closed because an external outlet-flow
+  boundary is not reported.
+- Bumped the resolved 3-D schema to v23 and added an atomic binary-FV restart
+  contract for long TI021 runs. Checkpoints retain conserved species and
+  sensible enthalpy, cell and face momentum, running maxima and the warm-start
+  projection potential; derived thermodynamics is reconstructed from the
+  declared closure. A SHA-256 of the complete solver configuration prevents a
+  restart under changed physics. The checkpointed TI021 runner commits 10 s
+  segments, sensor histories and versioned restarts, resumes the append-only
+  handoff HDF5, and removes only frames newer than the last atomic journal
+  entry. A matched two-segment versus one-shot audit passes every `1e-10`
+  equivalence gate: field concentration differs by at most `4.26e-14 vol%`,
+  receptor concentration by `2.39e-18 vol%`, velocity by `5.83e-15 m/s`, and
+  handoff flux fields by `2.66e-15` in their native units. This establishes
+  restart integrity, not physical validation. The 2.5 m production corrector
+  tolerance remains `1e-4`. The production 600 s member is now complete in
+  6,085.8 s with all numerical gates passing, maximum relative species-mass
+  residual `6.91e-16`, continuity residual `9.83e-12 kg/m3/s` and zero
+  nonlinear-corrector failures. Its model-selected 0--10 s peak segment was
+  subsequently replayed at `1e-4` and `1e-6`; all strict postcheck gates pass,
+  with `2.91e-4` concentration-field relative L1, `0.0222 vol%` field Linf,
+  `0.00499 vol%` receptor Linf and `0.00129 m/s` velocity-component Linf.
+  Evidence schema v12 now records the coarse/refined 600 s executions, both
+  no-fit scores, strict postcheck and full-event two-grid diagnostic as
+  separate hash-pinned promotion gates in `...evidence-audit...v16`, while
+  explicitly keeping full-event grid convergence false. A dedicated
+  observation-blind two-grid audit now
+  compares 5 m and 2.5 m final/maximum fields, all 60 receptor peaks, doses and
+  0.1 vol% arrivals, plus maximum-ever 4 vol% volume; it deliberately cannot
+  promote convergence until the 1.25 m representative-window third level is
+  available.
+  The third-level window is now frozen without observation values at 0--20 s:
+  report geometry and 3.9 m/s wind put nominal cloud-edge/fence contact at
+  11.03 s, leaving 8.97 s of post-contact response. Fresh identical initial
+  states on 5/2.5/1.25 m grids avoid cross-grid prolongation error. Measured
+  2.5 m cost projects the 1.25 m, 819,200-cell, 640-step run at 2.16 h. This
+  window may qualify obstacle-impact sensitivity only; full-event finest-grid
+  convergence remains withheld. The matched 5 m/20 s member already passes all
+  numerical gates in 36.0 s. The 2.5 m prefix was materialized directly from
+  its atomic 20 s checkpoint with mass residual `2.76e-16`, continuity
+  `9.83e-12 kg/m3/s` and zero nonlinear failures. Their two-grid comparison is
+  intentionally non-promoting: maximum-ever 4 vol% volume changes only 1.67%,
+  but common-fluid maximum-field L1 changes 29.3%, eligible receptor peak MAPE
+  is 50.7% and dose MAPE is 88.0%. The disparity makes the 1.25 m member a
+  required falsification test rather than an optional refinement.
+  The first 1.25 m execution rejected itself before scoring: the originally
+  planned `dt=0.03125 s` produced species/thermal diffusion numbers
+  `0.553501`/`0.523581`, above the explicit 0.5 stability limit. Its partial
+  artifacts and typed failure record are preserved. Plan v2 uses
+  `dt=0.0625/0.03125/0.015625 s` for new 5/2.5/1.25 m members, restoring an
+  exact 2:1 accepted time-refinement path and doubling the fine member to
+  1,280 steps. A stable-`dt` execution with a 10 s checkpoint interval was
+  deliberately stopped at `t=0.328125 s` (22 frames) when measured throughput
+  exposed an approximately seven-hour recovery window before its first atomic
+  commit. Its closed partial artifacts are hash-pinned and unscored; no physics
+  changed. The replacement uses identical physics with 1 s checkpoints. The
+  plan generator is schema v3 and hash-binds both the rejected member and this
+  operational interruption. It also projects each revised member's advection and diffusion
+  numbers from the measured 2.5 m first-20-s maxima; the fine estimates are
+  0.2497/0.2724/0.2576 for advection/species/thermal diffusion and pass both
+  explicit stability gates. The regenerated artifact is
+  `...impact-window-plan...v5`. The revised fine run is underway without
+  observation access. A separate physical-bias plan now preregisters a
+  diagnostic-only local gradient-Richardson field before any closure change.
+  Primary dense-plume and stratified-LES evidence supports testing suppressed,
+  anisotropic vertical mixing, but TI021 observations may not select a
+  coefficient and the neutral production closure remains unchanged until the
+  grid baseline is complete. A diagnostic-only finite-volume gradient-
+  Richardson operator and fixed-region summary are now implemented. The shear
+  regularisation is explicit, solid/domain faces follow the transport
+  zero-normal-gradient convention, and undamped neutral scalar-diffusivity
+  exposure is reported separately. This path has no damping function, changes
+  no flux and is not coupled to the running baseline.
+  A checkpoint audit driver is also ready: it refuses incomplete journals,
+  verifies every segment hash, binds the frozen concentration-blind mixing
+  policy, and emits time-resolved front/roof/side/wake plus coordinate-only
+  receptor-cell diagnostics. Its shear regularisation has no default and its
+  promotion policy is always false.
+  Before opening diagnostic output, the required factor-two envelope was
+  frozen at `0.0205/0.041/0.082 s^-1 = 0.5/1/2 * u*/H_wall`; every member must
+  be retained and post-execution selection is prohibited. The hash-pinned plan
+  is `...stratification-diagnostic-plan...v1`.
+  A companion envelope driver executes all frozen members and hash-pins their
+  records/figures while exposing only regional and receptor-cell ranges, not a
+  best-member choice.
+  A live runtime projector now hash-pins the observed progress prefix and
+  reports first-checkpoint/full-window projections without treating them as
+  completed physics evidence.
+  The independent TI021 scorer no longer hard-codes every completed run as
+  `dx=5 m`: status, wall-height cell count, near-ground receptor aliasing,
+  decision text and plot labels are now derived from the run record. The
+  regenerated 5 m score is unchanged. The completed 2.5 m score is correctly
+  labelled `pending_finest_grid`: six-arc peak/dose MAPE is 51.9%/79.5%, peak
+  time MAE is 60.7 s, and 60-sensor dose MAPE is 86.5% despite Pearson
+  `r=0.847` and Spearman `rho=0.914`. The full-event 5-to-2.5 m comparison is
+  also non-converged: maximum-field relative L1 is 28.9% and receptor
+  peak/dose MAPD is 36.5%/28.1%, while maximum-ever 4 vol% volume changes only
+  1.67%.
+  A predeclared three-grid impact audit is now ready for the 1.25 m member. It
+  computes common-grid field-error contraction, observed order and fine-grid
+  GCI for monotonic scalar triplets, 4 vol% volume and three-axis extents,
+  fixed front/roof/side/wake metrics, and per-receptor peak/dose/arrival
+  convergence. Its schema always preserves the 600 s finest-grid holdback;
+  an end-to-end synthetic 5/2.5/1.25 m test verifies both artifact generation
+  and that non-promotion contract.
+  The mandatory `1e-6` production-tolerance postcheck is also executable
+  without rerunning from event time zero. A restricted restart bridge accepts
+  only changes to the paired density/velocity corrector tolerances and rejects
+  every other configuration difference. The peak-window audit selects the
+  committed 10 s segment containing the model-only receptor maximum, replays
+  both `1e-4` and `1e-6` from one identical conserved state, checks the
+  candidate against its committed segment, and compares fields, receptors,
+  handoff fluxes, conservation and runtime. Peak selection and restart-rebind
+  tests pass, and the production audit is accepted; the strict replay costs
+  1.54 times the candidate replay.
+  The nested 145-sensor execution path is now checkpointable and bounded in
+  memory. `ConservativeHandoffHdf5Reader3D` reads only the one or two durable
+  inner frames bracketing each outer midpoint, performs the same exact-area
+  remap as the eager operator, and exposes remap residuals without loading the
+  full five-field history. The 440 x 640 x 40 m outer runner advances the
+  coupled momentum/species/enthalpy system on a 5 m grid, samples all 94 outer
+  sensors, commits state/maximum fields/traces every 10 s, and fail-closes on
+  continuity, absolute accumulated conservation, corrector, inlet-flux and
+  remap gates. A full-domain two-step end-to-end test passes through lazy HDF5
+  input, two atomic checkpoints and final artifact assembly.
+  `score_thorney_ti021_nested_145_sensors.py` closes the postprocessing path:
+  it linearly places the 5 m outer histories on the finer inner event clock,
+  verifies the expected 60 + 94 - 9 = 145 coordinate union, prefers the
+  obstacle-resolved inner value in the overlap, and separately enforces the
+  predeclared 10% peak/dose overlap gates. Only after both observation-blind
+  runs are accepted does it open the workbook dose/timing values and report
+  all-sensor vol%-based dose, arrival, departure and 4 vol% sensor summaries.
+  Synthetic end-to-end scoring and union tests pass; full-event finest-grid
+  convergence remains explicitly withheld.
+- Bumped the resolved 3-D schema to v22 and corrected TI021 initial momentum.
+  The HSE report (p. 150) describes a stationary gas cloud when the flexible
+  holder reached the ground; the former run incorrectly initialized the dense
+  cloud with the ambient carrier velocity. The new `quiescent` mode retains
+  only the ambient-share momentum in cut cells and assigns zero momentum to
+  the cloud share without a concentration fit. A 600 s, 5 m resolved-inner run
+  now completes all 4,800 steps and 60 sensors in 501.1 s, flushes 4,801
+  conservative handoff frames, closes relative species mass to `3.59e-15`,
+  keeps continuity below `3.0e-12 kg/m3/s`, and has zero non-converged steps.
+  Its observation-blind score is deliberately withheld from quantitative
+  promotion: six arc peaks are low by 47.8% MAPE, dose is low by 81.5% MAPE,
+  and arrival is 25.2 s early among detected sensors. The 5 m mesh gives only
+  one cell over the fence and aliases the 0.4/2.4 m sensors; 2.5/1.25 m checks
+  and the outer 145-sensor transient remain. Evidence schema v10 is regenerated
+  in `...evidence-audit...v13` with status
+  `conditional_pending_outer_transient_and_grid_convergence`.
+- Added actual-inner streaming handoff evidence. The 200 x 200 x 40 m inner
+  domain samples solver x=160 m (physical site y=100 m), streams all five
+  conservative fluxes to append-only HDF5, reopens them and remaps from the
+  shared `q=-site_x` frame to the 640 m outer plane. The preflight passes all
+  coordinate, persistence, corrector and conservation gates; maximum integral
+  remap residual is `1.94e-16`.
+- Corrected the physical coordinate contract of the TI021 nested plan. The
+  previous sensor-complete 600 x 640 x 40 m box was a valid monolithic coverage
+  domain but could not receive an inner downstream plane at its x-min without
+  shifting site coordinates. Plan schema v2 now places the handoff at
+  site-local downwind y=100 m (inner solver x=160 m) and maps it to x=0 of a
+  440 x 640 x 40 m nested outer domain. The inner domain covers 60 sensors,
+  the nested outer covers 94, their 9-sensor overlap is independent, and the
+  union covers all 145. The 600 m box is retained only as a monolithic runtime
+  reference. Evidence v8 is regenerated in `...evidence-audit...v11`.
+- Added a coupled conservative outer-domain execution step and bumped the
+  binary-mixture corrector schema to v3. The reconstructed inlet `u/v/w` now
+  enters the finite-volume momentum predictor, while the same total/species/
+  sensible-enthalpy flux triplet enters the variable-density corrector and the
+  projected face state is fed back to the next step. The scalar path now uses
+  the declared bounded MUSCL--van Leer option instead of silently forcing
+  first-order upwind for binary mixtures.
+- Accepted the concentration-blind TI021 outer-momentum and same-grid overlap
+  component. Across 48 coupled steps, lateral/vertical inlet momentum flux is
+  reconstructed to round-off, local continuity is below `1e-7 kg/m3/s`, and
+  eight common 5 m receptors change by at most `7.35e-9` in peak and `2.15e-8`
+  in dose relative terms between the narrow reference and wide outer domain.
+  A separate 2.5-to-5 m diagnostic is deliberately not folded into that
+  handoff gate: it fails with 18.81% peak and 45.12% dose change, so 5 m is not
+  promoted as grid-converged. Evidence schema v8 now reports
+  `conditional_pending_full_transient_convergence_and_no_fit_scoring` and the
+  145-sensor run is enabled but not yet completed.
+- Added the outer binary-mixture inlet boundary contract and bumped its
+  corrector schema to v2 (subsequently v3 above). Linear interpolation of the remapped handoff history
+  is combined with an independently declared ambient mass flux; species-flux
+  and enthalpy-flux ratios recover boundary mass fraction, temperature,
+  density and velocity without clipping. Prescribed total mass flux remains
+  fixed while pressure projection corrects the downstream face. A 5 m,
+  8,192-cell audit closes species to `1e-10 kg`, enthalpy to `1e-6 J` and local
+  continuity to `1e-7 kg/m3/s`. This accepts the outer species/energy/
+  continuity boundary only; momentum coupling and overlap comparison remain.
+- Added the first conservative nested-handoff component. Exact rectangular
+  face-overlap remapping transfers time-dependent total-mass anomaly, species
+  mass, sensible enthalpy and lateral/vertical momentum flux densities from
+  the resolved inner y-z plane to the wider outer plane. Signed fluxes and
+  backflow are retained without clipping or post-hoc renormalisation. The
+  TI021 analytic 1.25 m to 5 m audit preserves every integrated flux to
+  `1e-12` relative tolerance. This accepts only the remap operator; outer
+  transient boundary coupling and an overlap-domain comparison remain pending,
+  so the evidence state is
+  `conditional_pending_outer_boundary_coupling_and_full_transient`.
+- Added a concentration-blind TI021 full-transient coverage and feasibility
+  audit. The existing 130 x 140 x 16 m preflight contains only 33 of 145 dose
+  sensors; the complete network extends to 500 m downwind and +/-300 m
+  crosswind. A frozen 200 x 200 x 40 m resolved inner domain covers the full
+  fence and all six 75/100 m arc centreline observations, while a
+  600 x 640 x 40 m outer domain covers all 145 sensors. Measured cell-step
+  timings show that the 1.25 m monolithic 600 s run would require at least
+  1,730 h per prior member. The evidence gate now fails closed at
+  `conditional_pending_conservative_nested_handoff_and_full_transient` until
+  species-mass, enthalpy and mass-flux handoff is verified.
+- Bumped the resolved 3-D schema to v20 and added an explicit neutral
+  Monin--Obukhov surface-layer background closure. It applies
+  `nu_t=kappa*u_star*z` to finite-volume momentum and, only with
+  declared turbulent Schmidt/Prandtl numbers, to species and heat diffusion.
+  The TI021 policy is frozen without loading concentration, dose or arc values:
+  primary `Sc_t=0.7`, `Pr_t=0.74`, with all six combinations of
+  `Sc_t={0.2,0.7,1.3}` and `Pr_t={0.74,1.0}` mandatory in the no-fit run.
+  A 1 m, 291,200-cell coupled preflight with the primary closure passes every
+  numerical and geometry gate in 34.0 s. The evidence package advances only to
+  `conditional_pending_full_transient_convergence_and_no_fit_run`; the closure
+  is a neutral ambient prior, not obstacle-wake turbulence validation.
+- Bumped the resolved 3-D schema to v19 and separated the finite-volume
+  carrier-flow initial condition from the optional D3Q19 spin-up. The new
+  `projected_inlet` path preserves the declared molecular viscosity instead of
+  inflating it to satisfy a coarse-grid BGK relaxation limit, projects the
+  report-scale vector inlet around solids, and is explicitly recorded as an
+  unconverged initial condition rather than a wake or turbulence model.
+- Completed a concentration-blind TI021 full-site single-step preflight. The
+  1 m, 291,200-cell case represents the 5 m wall exactly, runs the full
+  R12/air species-energy-EOS-momentum-continuity coupling in 32.4 s, conserves
+  R12 mass to round-off, limits local continuity residual to
+  `3.70e-11 kg/m3/s`, and converges the nonlinear corrector in 11 iterations.
+  This promotes the evidence only to
+  `conditional_pending_turbulent_closure_and_no_fit_run`; it is not a dose or
+  dispersion validation.
+- Added a cached symmetric smoothed-aggregation AMG preconditioner for the
+  variable-density pressure projection, with PyAMG version, hierarchy depth
+  and operator complexity in diagnostics. On the same concentration-blind
+  TI021 2 m case, AMG-CG reduces summed projection iterations from 4,313 to
+  107 (40.31x) and wall time from 4.40 to 1.53 s (2.87x) while preserving the
+  mixture state and continuity gate. The 1 m preflight falls from about 66 to
+  32.4 s. A machine-readable acceleration audit retains both input hashes.
+- Added a dedicated Thorney Island Trial 021 evidence reader and fail-closed
+  audit. It preserves 145 dose sensors (84 positive), six arc observations,
+  source hashes and report/workbook conflicts. The final-report priority policy
+  fixes the impermeable 50 m radius, 5 m high semicircular fence and retains
+  workbook alternatives as sensitivities.
+- Added native `CircularArcWall` solids to both 3-D obstacle tiers. A three-grid
+  audit passes connectivity, source-clearance and height gates and reduces
+  arc-length error from 5.68% to 1.22% to 0.27%.
+- Added schema-v18 conservative binary-mixture initial-cloud transport. It
+  advances species mass with projected total mass flux and mass-fraction
+  diffusion, sensible enthalpy, fixed-pressure ideal-gas EOS, buoyancy and
+  finite-volume momentum/continuity. Exact dodecagonal-prism cell intersections
+  reproduce the TI021 2050 m3 holder volume to -0.0876%; 32 mol% R12 recovers
+  58.389 g/mol and relative density 2.0158. Three-grid initial volume/mass and
+  a reduced coupled step pass their component gates. Full-scale TI021 scoring
+  remains conditional pending convergence audits.
+- Froze the TI021 molecular-property lane independently of concentration data.
+  The measured 1994 Taylor-method CFC12-air correlation gives
+  `D=9.78865e-6 m2/s` at 291.15 K with +/-2% experimental uncertainty;
+  CoolProp 8.0.0 and its exact revision provide the event-state pure-R12
+  caloric/transport record. The audit explicitly prohibits using molecular
+  diffusion to select the unresolved turbulent scalar-mixing closure.
+- Completed the first concentration-sealed PRESLHY E3.4 Sand03 dynamic replay.
+  The numerical configuration and scoring policy are independently frozen and
+  hash-bound before H2 observations are opened. The 268.5 s/26,850-step run
+  takes 241.4 s and passes mass, energy, continuity, Mach, density-departure and
+  corrector gates. The uncalibrated accuracy result is retained as a failure:
+  CH45/CH55 MAE 4.280/2.305 vol%p, median peak error 21.53 vol%p, median dose
+  error 124.4%, and pooled 4 vol% sensitivity/specificity 0.594/0.787.
+- Added a no-fit post-score diagnosis. The observations are already nonzero at
+  the post-fill window origin while the numerical field starts at zero, and
+  both model peaks coincide with the lowest applied inlet-U quartile. Model
+  concentration correlates with inverse whole-inlet U at 0.889/0.858 whereas
+  the observations give 0.085/0.057. This records missing release prehistory
+  and a likely local-wind/whole-inlet mismatch without authorizing a time
+  shift, source rescaling, closure selection, or obstacle qualification.
+- Added a wind-only E3.4 reader and a mass-only fill-onset policy that never
+  loads H2 values. The Sand03 diagnostic starts at the fixed 10% smoothed-mass
+  crossing, 129.5 s before the primary window, and extends the already frozen
+  post-fill rate backward as an explicit unqualified source assumption. Its
+  398 s run passes numerical gates in 365.5 s. Peak and arrival errors improve
+  to 14.63 vol%p and 55%, but dose error remains 116.3% and pooled 4 vol%
+  sensitivity/specificity remain 0.590/0.792. The artifact therefore confirms
+  prehistory as only a partial cause and remains diagnostic after the failed
+  primary, never a replacement or independent validation.
+- Added a source-only PRESLHY E3.4 event-window freeze. The selector opens only
+  the corrected pool-mass worksheet, smooths that channel under one declared
+  policy, retains every qualifying post-fill decay, fingerprints each raw
+  workbook and explicitly records that hydrogen, wind, trigger, temperature,
+  predictions and error metrics were unused. The four public wind trials yield
+  13 frozen candidate windows (3/3/3/4); fitted mass-loss rates span
+  0.001856--0.010766 kg/s. Atmospheric vapour flux remains conditional because
+  liquid-mass loss is not a direct gas-flow measurement, and sand/gravel
+  intervals carry a porous-substrate artefact warning. The reviewed record is
+  `outputs/preslhy-e34-source-window-freeze-2026-10-11-v2/`.
+- Added synchronized PRESLHY E3.4 10 Hz three-component sonic/H2 ingestion and
+  fail-closed `FieldEvidenceManifest` records. Three of four wind workbooks can
+  support dynamic component replay; Sand02 wind and CH35 are workbook-flagged
+  defective. Site obstacles remain figure-only, sensor evidence is nominal
+  specification rather than event calibration, and vapour flux is unresolved,
+  so obstacle-transport qualification remains false.
+- Bumped the resolved 3-D schema to v17 and added a linearly interpolated,
+  three-component transient inlet history to the active finite-volume
+  momentum/pressure/species path. The record must start at event time zero,
+  cover the complete run and retain positive streamwise inflow; it is rejected
+  on the older D3Q19-active path. Diagnostics preserve history identity,
+  component ranges and applied inlet extrema. A single vector history is
+  multiplied by the declared spatial inlet shape and is explicitly not called
+  a spatial turbulence reconstruction.
+
+- Extended the finite-volume active momentum inlet from a height-only vector
+  to a complete `z-y` mean-velocity plane and bumped the resolved result to
+  schema v16. The HyTunnel audit can now read the public fan-flow workbook,
+  select the first 3.5 m/s co-flow average plane, translate its relative
+  coordinates to each computational domain, and preserve DOI, sheet, x-plane
+  and SHA-256 provenance. No missing turbulence statistics are synthesized.
+  The 3,056-step measured-mean-fan/local-SGS candidate is stationary and
+  conservative but has MAE/RMSE 3.432/3.986 vol%p, bias +3.383 vol%p,
+  correlation 0.392, FAC2 0.356 and 4 vol% specificity 0.25 on the same 45
+  points. It worsens MAE by 0.0073 vol%p relative to uniform-in-y local SGS,
+  so the independently measured mean fan shape is retained as evidence but
+  rejected as the missing turbulence correction. Runtime is 385.7 s, above
+  the 300 s development target.
+
+- Added an opt-in five-face `all_pressure_open` candidate across D3Q19,
+  finite-volume momentum, variable-density mass projection and conservative
+  scalar/enthalpy transport. The projection now closes cellwise and global
+  continuity through any declared Cartesian open-face set, while lateral and
+  vertical scalar outflow enters the mass/energy ledger. Uniform-state,
+  multi-face source, disconnected-component, wall-drag and integrated solver
+  tests pass. A subsequent isothermal characteristic incoming-wave treatment
+  reduces the canonical one-dimensional linear acoustic reflection ratio from
+  91.72% for fixed pressure to 1.64% on both streamwise and lateral-normal
+  faces, passing the predeclared 5% gates. A separate 30° single
+  tangential-mode packet gives 4.188% and passes the same limit. The expanded
+  angle/wavelength sweep nevertheless fails: its resolved long-wave mode gives
+  8.268% at 45° and 12.774% at 60°. Added a separate multidimensional
+  characteristic candidate that estimates acoustic incidence cosine from the
+  local normal/tangential velocity perturbation and applies the corresponding
+  isothermal impedance without a fitted angle. On the unchanged sweep, all
+  seven resolved cases pass and the worst reflection is 3.907% at 60°.
+  A localised 45° packet aimed at the intersecting x-max/y-max open faces also
+  passes a conservative post-direct-pulse reflection gate at 2.594% (the 1-D
+  baseline is 2.849%). Other 3-D edge/corner orientations and plume
+  domain-size audits remain pending.
+- Added a same-grid HyTunnel plume-domain audit using the admissible 6%
+  handoff candidate. At 0.120343 s, the published-size and expanded boxes give
+  a 1.092% common maximum-field normalised L1 difference, 3.865% worst
+  primary-output change and 0.235% 4 vol% volume change, passing the frozen
+  10% numerical gate. An explicit cached-direct pressure projection reduces
+  the expanded 63,000-cell run from 477.6 s to 220.4 s while leaving the
+  concentration metrics unchanged, so it now passes the separate 5 min
+  development target. The official 0.707246 s/3,056-step audit is now complete:
+  worst primary-output change is 0.9901%, common maximum-field L1 is 1.2447%,
+  and the enlarged domain clears the lateral boundary gate. Its 1,402.2 s
+  runtime misses the 5 min target. This memory-intensive route remains opt-in
+  rather than the global default, and the domain result does not waive the
+  failed nonlinear vortical boundary gate.
+- Added the first resolved HyTunnel concentration overlap score. The 6%
+  handoff and 2.52 m common domain support 54 of 153 public average points;
+  81 upstream and 18 beyond-domain points are excluded without extrapolation.
+  A deterministic replay reproduces the frozen maximum slice exactly; its
+  final-20% receptor drift is at most 0.00687%, qualifying the endpoint as a
+  steady proxy. That endpoint gives MAE/RMSE 2.179/2.491 vol%p, Pearson r
+  0.733, FAC2 0.556, 4 vol% sensitivity 1.0 and specificity 0.522. Promotion
+  remains withheld because the frozen accuracy gates fail.
+- Added a predeclared HyTunnel source/mixing sensitivity audit on 45 common
+  points. At the 6% handoff, effective Schmidt numbers 0.5/0.7/1.0 give MAE
+  1.670/2.113/2.529 vol%p; a tighter 5% handoff at Sc=0.7 gives 2.185 vol%p.
+  The result localises the larger sensitivity to the unvalidated scalar-mixing
+  closure, but even the lowest-error perturbation misses FAC2 and 4 vol%
+  specificity gates. Observation-based best-variant selection is prohibited.
+- Corrected the interpretation of turbulent scalar and thermal diffusion in
+  the resolved tier. The new opt-in closure uses
+  `D_eff = D_molecular + nu_sgs / Sc_t` and
+  `alpha_eff = alpha_molecular + nu_sgs / Pr_t` as spatial fields; the former
+  uniform `nu_base/Sc` and `nu_base/Pr` routes remain explicitly named legacy
+  surrogates so v14 evidence is reproducible rather than silently redefined.
+  Conservative face fluxes now accept cellwise diffusivity, and the active
+  finite-volume momentum path recomputes WALE/Smagorinsky viscosity from the
+  evolving velocity field. The result schema is v15. A 100-step no-fit
+  HyTunnel preflight keeps mass and energy residuals below `9e-16`: the old 6%
+  handoff reaches 10.46% density departure and fails, while the independently
+  admissible 5% handoff reaches 9.25% and passes. Full-duration accuracy is
+  evaluated separately and is not inferred from this preflight. The official
+  3,056-step local-SGS case then reaches a stationary endpoint in 366.1 s and
+  remains numerically admissible, but its 45-point MAE/RMSE are
+  3.425/3.976 vol%p, bias is +3.380 vol%p, correlation is 0.396, FAC2 is 0.378
+  and 4 vol% specificity is 0.25. Against the matched 5%-handoff legacy
+  surrogate this worsens MAE by 1.239 vol%p and specificity by 0.20. The local
+  WALE scalar closure is therefore rejected for promotion; the legacy result
+  is not promoted either because its apparent improvement is compensating
+  numerical mixing rather than independently validated turbulence physics.
+- Added scaled x-y control, x-z/y-z edge and x-y-z three-face acoustic corner
+  audits. The angle-aware reflection ratios are 4.142%, 4.154%, 4.142% and
+  3.644%, respectively, passing the frozen 5% component gate at the scaled
+  8-cell wavelength. A separately persisted 10-cell matrix gives 6.076%,
+  6.073%, 6.075% and 5.999%, exposing wavelength sensitivity in that first
+  candidate. Added a coefficient-free, second-order-extrapolated
+  multidimensional characteristic candidate. Its x-y/x-z/y-z/xyz ratios are
+  2.418%/2.439%/2.420%/1.846% at 8 cells and
+  3.192%/3.179%/3.191%/3.152% at 10 cells, so both declared 3-D matrices pass
+  the frozen 5% gate for that raw-extrapolation candidate. A new finite-
+  amplitude Gaussian-vortex audit then falsified unified promotion: the raw
+  extrapolation becomes unstable. A separate TVD-limited local dilatation/curl
+  candidate remains stable and gives 0.943% vorticity error, but velocity and
+  density-contamination ratios are 19.825% and 243.230%; its 10-cell acoustic
+  matrix is also 5.502--5.564%. Both candidates therefore remain unpromoted.
+- Corrected the HyTunnel boundary transcription after rechecking the official
+  report: the experiment used a fan jet in a 6 m vessel and the CFD used open
+  non-reflecting conditions on all five non-inlet box faces, not no-slip
+  tunnel walls. The earlier all-face symmetry/free-slip surrogate remains a
+  diagnostic option but has been replaced by the pressure-open candidate in
+  the matched preflight.
+- Added a grid-specific resolved-source admissibility preflight. With the
+  characteristic pressure-open candidate, the nominal 10% mean-plane density
+  gate becomes a 13.342% local departure after moment-matched Gaussian mapping
+  and therefore fails closed. An 8% candidate also fails at 11.562%; a 6%
+  candidate passes this coarse numerical screen at 9.664%. The 6% route is only nominated for
+  grid/time/domain study and is not calibrated or promoted.
+- Added a no-fit HyTunnel concentration comparison for the frozen 1 mm,
+  5 g/s, 3.5 m/s co-flow case. The conservative source/handoff followed by
+  the existing axisymmetric free-jet route gives high spatial correlation
+  (`r = 0.937`) but a `+2.688 vol%p` mean bias, `FAC2 = 0.519`, 39 false
+  positive 4 vol% classifications and a 3.413 m 4 vol% centreline length
+  versus the measured 1.65 m. The diagnostic therefore rejects that shortcut
+  and reserves external promotion for the matched resolved 3-D open-box run.
+- Added a conservative high-pressure-H2 to low-Mach 3-D source adapter. It
+  reuses the energy-conserving notional nozzle, entrains declared ambient
+  co-flow until both Mach and density-departure gates pass, closes H2 mass,
+  plane momentum and total energy, and maps the result to a cell-integrated
+  anisotropic finite-width source with an explicit resolution gate. Added an
+  opt-in no-slip tunnel sidewall/roof boundary to both D3Q19 initialisation and
+  the finite-volume momentum predictor. That wall option is for genuinely
+  confined facilities and is not the HyTunnel boundary. HyTunnel scoring
+  remains withheld because the linear corner and official-duration domain
+  gates have passed, but vortical outflow, runtime, concentration accuracy and
+  nozzle-plane equivalence remain incomplete.
+- Added an opt-in unified finite-volume variable-density momentum/projection
+  active solver. It shares projected face mass fluxes with species and energy,
+  carries explicit source momentum, passes four-level first-order time
+  refinement and the aligned three-grid numerical component gate, and closes
+  global momentum to below `9e-15 kg m/s`. It remains non-default pending
+  independent obstacle-hydrogen validation.
+- Reconciled the 42 HyTunnel workbook sheets against the published 40-case
+  matrix: 39 declared H2 cases match, one declared cross-flow H2 case is He,
+  and two extra stagnant H2 baselines are present. Added a frozen matched
+  1 mm/5 g/s/3.5 m/s co-flow experiment/CFD specification and fail-closed
+  gates for source-model reconciliation, matched execution and external
+  boundary validation.
+- Added a coupled Tier-3 finite-block path linking D3Q19 momentum and Guo
+  buoyancy to conservative H2 species, sensible enthalpy, ideal-gas mixture
+  density and a variable-density face-mass-flux pressure correction. Added
+  manufactured continuity/corrector checks, cached sparse factorization with a
+  CG large-grid fallback, and bounded MUSCL-Hancock/van-Leer scalar transport.
+  Three-level time and grid audits remain explicitly withheld because full-field
+  differences and roof/side low-concentration metrics are not grid converged.
+- Added an opt-in WALE subgrid-viscosity closure with invariant, solid-mask and
+  relaxation-cap tests. A no-SGS/Smagorinsky/WALE comparison against 195 common
+  AIJ Case H mean-flow points shows only a 0.02--0.15% WALE error reduction
+  relative to Smagorinsky, a slight loss of W correlation, and roughly 1.9x
+  runtime; no closure is promoted and the comparison remains withheld.
+- Added opt-in non-equilibrium-extrapolation D3Q19 velocity/pressure boundaries,
+  exact moment tests, an AIJ candidate comparison and spatial residual
+  localisation. The candidate worsens all four primary errors and strongly
+  increases residual oscillation, so the historical boundary remains default.
+- Added finite-window carrier-flow averaging and a first-half/second-half mean-
+  field stationarity gate. The no-SGS AIJ 1000-step averaging window passes the
+  predeclared 1% component gate at 0.8015%; downstream-fetch sensitivity is
+  below 5%, while grid and hydrogen-concentration promotion remain withheld.
+- Corrected cuboid voxelization to half-open cell-centre membership and added
+  declared/effective obstacle bounds, face/size errors, cell counts and exact-
+  alignment diagnostics. The previous `0.020 m` AIJ grid had expanded the
+  nominal `0.10 m` block to `0.12 m`, invalidating that refinement comparison.
+- Added an all-face-aligned, time-averaged AIJ grid family. Observation-field
+  relative-L2 changes decrease from 2.88% to 0.95% for U and 12.54% to 5.11%
+  for W; finest-pair metrics, lee velocity, stationarity and divergence pass
+  their declared gates. Status is `accepted_component_grid`, limited to the
+  carrier-flow component.
+- Replaced centre-sampled 3-D Gaussian releases with analytic Cartesian-cell
+  integrals and added a nested-grid aggregation test. The repeated active
+  thermal grid audit improves source consistency but still fails monotonic
+  full-field convergence and shows 26--36% finest-pair roof/side peak/dose
+  changes, so quantitative concentration promotion remains withheld.
+- Defined the non-publication product target and G1--G4 completion gates for a
+  dynamic local-facility hydrogen consequence model that complements free-field
+  slab dispersion rather than duplicating it.
+- Added fixed-carrier and coupling-isolation time audits for the active Tier-3
+  path. Species/enthalpy/EOS/mass-flux correction is first-order convergent on
+  a common carrier, while equilibrium replacement and deferred Guo feedback of
+  the pressure correction into isothermal BGK momentum remain non-monotonic.
+  A transport-only diagnostic passes but is deliberately not promoted because
+  it omits pressure-to-momentum feedback. This establishes the next gate as a
+  unified variable-density low-Mach momentum/pressure formulation.
+- Re-composed the IJHE graphical abstract at 1400 x 560 px so it meets the
+  Elsevier minimum dimensions and preferred 2.5:1 submission ratio without
+  stretching; the figure audit now enforces both requirements.
+- Expanded the IJHE bibliography from 15 to 19 cited records and checked all
+  journal DOIs against Crossref/publisher metadata. Corrected the Hecht--Panda
+  title/pages and two author-order records without changing the scientific
+  claims.
+- Clarified that the conventional Hanna `VG` is an exponentiated uncentred
+  mean-square log error containing both systematic bias and residual scatter,
+  rather than a variance computed after removal of `MG`.
+- Added a mass-conservative, 0–100 vol%-bounded dynamic enclosure response with
+  source displacement, measured mechanical ventilation and buoyant-opening
+  exchange. Exp19-only coefficient identification followed by frozen
+  Exp20/21/23 retrospective parameter holdouts gives pooled MAE 0.282 vol%p,
+  RMSE 0.332 vol%p and r = 0.980; the same-window ideal well-mixed MAE is
+  6.441 vol%p. Spatial-mean 4 vol% first-arrival/duration MAEs are 3.70/27.1 s.
+  Individual-sensor, prospective-blind and outdoor-LH2 claims
+  remain excluded.
+- Added hash-verified public USN car-park intake for four GH2 blowdowns. The
+  audit reproduces the published 4 vol% room-cloud arrival/duration operator
+  and retains a no-fit well-mixed comparator as component evidence only.
+- Added HyTunnel-CS Pro-Science workbook/CAD intake for 15,768 concentration
+  points and 1,260 ventilation-velocity points. The audit preserves the
+  published 40-configuration versus 42-sheet discrepancy and remains
+  conditional rather than promoting GH2 tunnel data to LH2 validation.
+- Added a hash-pinned MultHyFuel D2.2 obstacle/CFD evidence audit. It records
+  the ExJet geometry, receptors and model context while refusing a cross-code
+  ranking because no matched numerical export is published and DEGALI's
+  current free-field core does not resolve the cylinder array.
+
 ## 0.3.0 - 2026-10-09
 
 - Reserved and embedded the exact Zenodo release DOI

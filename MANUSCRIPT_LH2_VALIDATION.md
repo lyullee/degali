@@ -1,6 +1,6 @@
 # Observation-operator-aware validation and decision implications of a fast liquid-hydrogen dispersion model
 
-**Article type:** Research article; **Manuscript word count (including abstract and keywords; excluding references and declarations):** 4,247; **Abstract word count:** 165
+**Article type:** Research article; **Manuscript word count (including abstract and keywords; excluding references and declarations):** 5,536; **Abstract word count:** 196
 
 ## Abstract
 
@@ -13,8 +13,11 @@ variance and FAC2 is the factor-two agreement fraction. Synchronized 20 s means 
 MG = 0.544, VG = 4.601 and FAC2 = 0.761, demonstrating operator sensitivity.
 A six-arc FFI/DNV screen gives MG = 1.245, VG = 1.373 and FAC2 = 0.833,
 while Test 6 retains a 3.48-fold underprediction at 30 m. Two FFI cases
-change 11 of 18 binary 4 vol % line classifications. A 3-D transient extension is numerically
-verified for convergence and conservation, not field validation.
+change 11 of 18 binary 4 vol % line classifications. A separate bounded
+enclosure model fitted on one GH2 experiment gives pooled MAE = 0.282 percentage
+points, RMSE = 0.332 percentage points and r = 0.980 on three frozen parameter holdouts. A 3-D
+transient extension is numerically verified for convergence and conservation,
+not field validation.
 The result is an evidence-bounded LH2 screening framework linking source,
 weather, sensors and decisions; it is not transient multiphase CFD or a
 regulatory design basis.
@@ -23,7 +26,7 @@ regulatory design basis.
 
 ## 1. Introduction
 
-LH2 releases span flashing, cold entrainment, possible atmospheric-condensate formation, a momentum-dominated jet and subsequent buoyant dispersion. Generic engineering models can be fast but are commonly supported by gaseous or non-cryogenic evidence. Detailed CFD can resolve site geometry and transience but is not a practical replacement for transparent rapid screening. This paper asks a narrower question: what can a fast LH2-specific path predict with current public evidence and no coefficient selected on validation data?
+LH2 releases span flashing, cold entrainment, possible atmospheric-condensate formation, a momentum-dominated jet and subsequent buoyant dispersion. Generic engineering models can be fast but are commonly supported by gaseous or non-cryogenic evidence. Detailed CFD can resolve site geometry and transience but is not a practical replacement for transparent rapid screening. This paper asks a narrower question: what can a fast LH2-specific path predict with current public evidence, and can a separately identified bounded enclosure response extend dynamic utility without changing the no-fit outdoor baseline?
 
 Recent IJHE work reinforces the relevance of digital-twin safety monitoring and
 the growing LH2-release evidence base [1,2]. Physics-guided full-field
@@ -93,6 +96,26 @@ numerical reference; they are not experimental accuracy, sensor accuracy or
 evidence of obstacle-wake validity. The full table is retained in the
 transient error-study record and the scope boundary is documented in the
 supplementary methods.
+
+### 2.2 Bounded dynamic enclosure response
+
+The failed direct transfer of the 3-D free-field closure to a ventilated
+container motivated a separate, non-spatial enclosure model. Let `alpha` be
+the H2 volume fraction in an effective mixed volume `Veff`, `Qs` the measured
+H2 source volume flow, `Qv` the measured mechanical ventilation and `Qb` a
+buoyant opening exchange. The bounded balance is
+`d alpha/dt = [Qs(1-alpha) - (Qv+Qb)alpha]/Veff`, with
+`Qb = Aeff sqrt[g H alpha(rho_a-rho_h)/rho_a]`. The source-displacement term
+and analytic constant-forcing update keep `0 <= alpha <= 1` and retain an
+explicit H2 mass ledger.
+
+Three closure quantities are identified on USN Experiment 19 only: mixed-
+volume fraction, effective opening area and transport delay. Delay is searched
+on the 0.3 s sensor grid from 0 to 30 s; the other two coefficients use bounded
+least squares. They are then frozen for Experiments 20, 21 and 23. The target
+is the 900 s spatial mean of non-flatlined D139--D162 room sensors. Because the
+model form was developed with knowledge of the complete public record, this is
+retrospective parameter-holdout evidence, not prospective blind validation.
 
 ## 3. Validation material and operators
 
@@ -205,6 +228,33 @@ headline scores and do not support a universal obstacle-wake closure. The
 inventory and promotion decision are documented in
 [`docs/ijhe-smedis-transfer-boundary-2026-10-09.md`](docs/ijhe-smedis-transfer-boundary-2026-10-09.md).
 
+### 3.7 Independent dynamic, spatial and CFD context lanes
+
+Three public records are retained as component-level evidence without changing
+the LH2 headline score. The USN ventilated car-park record supplies four GH2
+blowdowns with measured mass flow, ventilation and sensor time series. Its
+published 4 vol% room-cloud arrival/duration operator is reproduced on 24
+CAN-bus sensors. Experiment 19 identifies the bounded enclosure closure and
+Experiments 20, 21 and 23 retain frozen coefficients as retrospective
+parameter holdouts. The HyTunnel-CS Pro-Science record supplies average, maximum
+and minimum H2 concentration grids, measured ventilation-velocity grids and
+CAD files across nominal nozzle, flow and ventilation conditions. The
+MultHyFuel D2.2 report supplies an experiment/CFD comparison for a high-pressure
+GH2 jet entering a cylinder array [13,14,15].
+
+These lanes test different parts of the evidence workflow: dynamic threshold
+operators, spatial matrix preservation, signed ventilation flow, geometry
+provenance and cross-code comparison rules. They are not pooled with E3.5 or
+FFI/DNV because they are gaseous-hydrogen confined/ventilated or obstructed-jet
+cases, not matched outdoor LH2 releases. The MultHyFuel report publishes plots
+rather than matched numerical receptor exports, and the present DEGALI core
+does not resolve its cylinder array, so no cross-code rank is calculated. The
+hash-pinned intake and promotion rules are documented in
+[`docs/ijhe-multifidelity-evidence-2026-10-10.md`](docs/ijhe-multifidelity-evidence-2026-10-10.md).
+More broadly, field-deployed HyWAM work shows why spatial and temporal plume
+profiling must be retained [16], while controlled sensor-testing studies show
+that apparatus and response protocols can affect the reported indication [17].
+
 ## 4. Metrics and reproducibility
 
 MG, VG and FAC2 use conventional observed/predicted dense-gas model definitions
@@ -222,7 +272,9 @@ removed before the logarithmic statistics. We report
 `MG = exp(mean(ln r_i))`, `VG = exp(mean((ln r_i)^2))`, and
 `FAC2 = mean(0.5 <= P_i/O_i <= 2)`. Thus MG is explicitly
 observed/predicted, while FAC2 counts predictions within a factor of two of the
-observation. The commonly used Hanna screening limits are descriptive
+observation. Under this convention, `ln(VG)` equals the population variance of
+the log error plus `ln(MG)^2`; VG therefore contains both systematic bias and
+residual scatter and is not a bias-centred variance. The commonly used Hanna screening limits are descriptive
 conventions, not certification criteria; trial clustering and the declared
 observation operator remain the primary uncertainty controls.
 
@@ -239,6 +291,14 @@ underprediction. Arc and sensor rows are not independent trials.
 The trial-cluster bootstrap and all receptor-level residuals remain in the
 supplementary tables and are regenerated by the audit scripts. This compact
 table is the upload-facing summary; it does not pool the evidence lanes.
+
+The bounded enclosure lane uses arithmetic residual metrics because its target
+is a common-clock time series that includes zero and near-zero values. MAE,
+RMSE, signed bias and Pearson correlation are calculated over each 900 s
+event. The three frozen parameter-holdout histories are additionally
+concatenated for one pooled descriptive score. This pooling does not turn
+time samples or sensors into independent experiments; the experiment remains
+the inferential unit.
 
 As a descriptive uncertainty check, resampling complete trials (5,000 fixed-
 seed draws) gives corrected E3.5 95% percentile intervals of 0.771–1.416 for
@@ -346,6 +406,10 @@ a 2.47 m mean absolute error in lowest flammable height. Pool-axis LFL reaches
 are 29.1–66.5 m, but three exceed the 33.8 m concentration-distance evidence
 boundary and remain extrapolations. Pool-axis and fixed-height jet distances
 are not pooled.
+Classic NASA field tests used large pool spills and instrumented towers [18],
+whereas later FLACS validation represented those releases with a geometry-
+resolving CFD pool model [19]. Neither record is therefore treated as a
+like-for-like rank against the present momentum-dominated jet path.
 
 Published FLACS and ADREA-HF “HSL Test 6” calculations belong to a different
 2010 campaign at 0.071 kg/s, not the 2019 FFI Test 6 at 0.833 kg/s, and cannot
@@ -357,9 +421,60 @@ The distinction is consistent with prior LH2 CFD studies that treat release
 and cryogenic-dispersion conditions as scenario-specific [10,11], while
 pool-spill modeling is a separate archetype [12].
 
-### 5.9 Decision-boundary table and figure captions
+### 5.9 Independent dynamic and multi-fidelity evidence
 
-**Table 2. FFI Test 6 low-wind boundary at the 30 m receptor.** The three
+For USN Experiments 19, 20, 21 and 23, the reproduced first 4 vol% arrivals
+differ from the publication table by at most 0.498 s and the reported
+flammable durations by at most 5.51 s. A coefficient-free ideal well-mixed
+baseline overpredicts the observed room-array peak by factors 1.542–1.869
+(mean 1.619) and greatly overpredicts duration.
+
+The bounded enclosure model identifies an effective mixed-volume fraction of
+0.5475, an effective buoyant-opening area of 0.5867 m2 and a 5.1 s transport
+delay on Experiment 19. With those values frozen, the pooled Experiments
+20/21/23 spatial-mean history gives MAE = 0.282 vol%p, RMSE = 0.332 vol%p and
+`r = 0.980`; its MAE is 95.6% lower than the same-window ideal well-mixed
+baseline. Individual holdout MAEs are 0.265, 0.302 and 0.280 vol%p. Predicted
+spatial-mean peaks are 6.828, 4.450 and 4.289 vol% against 7.235, 5.331 and
+4.318 vol%, respectively. For the same holdouts, spatial-mean 4 vol%
+first-arrival MAE is 3.70 s (maximum 5.70 s), whereas flammable-duration MAE
+is 27.1 s (maximum 45.6 s). All histories pass the 0–100 vol% bound and the
+maximum mass residual is `6.44e-15 kg`.
+
+These scores support a fast dynamic enclosure-average response, not individual
+sensor fields, an outdoor LH2 claim or a CFD replacement. The model form was
+chosen with knowledge of the four-case record, so the three frozen-parameter
+tests are retrospective holdouts rather than prospective blind validation.
+
+The HyTunnel intake verifies all published file MD5 values and reads 15,768
+concentration-grid values plus 1,260 signed ventilation-velocity values. Its
+42 workbook sheets include 41 labelled H2 and one labelled He, which conflicts
+with the metadata statement of 40 configurations. The discrepancy, absent
+transient common clock and unconverted CAD keep the lane conditional.
+
+For the MultHyFuel obstructed ExJet case, the report-level comparison includes
+CFX, FLACS, OpenFOAM and FRED. FRED is reported closest for centreline
+concentration despite not resolving the obstacle array, whereas the CFD radial
+profiles show obstacle-induced asymmetry. Without the underlying numerical
+receptor exports, digitising the figure and assigning a new rank would add an
+uncontrolled observation operator. The report is therefore CFD context, not a
+new performance score.
+
+### 5.10 Decision-boundary table and figure captions
+
+**Table 2. Bounded dynamic enclosure comparison.** Experiment 19 is the sole
+coefficient-calibration case; Experiments 20, 21 and 23 retain those
+coefficients. Values compare the spatial mean of non-flatlined room sensors
+over 900 s. The role is GH2 enclosure evidence and is not pooled with Table 1.
+
+| Experiment | Role | MAE (vol%p) | RMSE (vol%p) | r | Observed/predicted peak (vol%) |
+|---|---|---:|---:|---:|---:|
+| Exp19 | calibration | 0.197 | 0.240 | 0.992 | 6.992 / 6.504 |
+| Exp20 | parameter holdout | 0.265 | 0.314 | 0.989 | 7.235 / 6.828 |
+| Exp21 | parameter holdout | 0.302 | 0.349 | 0.982 | 5.331 / 4.450 |
+| Exp23 | parameter holdout | 0.280 | 0.334 | 0.974 | 4.318 / 4.289 |
+
+**Table 3. FFI Test 6 low-wind boundary at the 30 m receptor.** The three
 predictions are the declared low, mean and high mast-wind cases; the reported
 arc maximum is 21.0 vol %. The source record does not support a fitted
 correction.
@@ -397,6 +512,13 @@ regulatory setbacks.
 The comparison is against a declared numerical reference and is not measured
 transient validation.
 
+**Figure 7. Bounded dynamic enclosure response.** Experiment 19 identifies
+three closure coefficients; the same coefficients are frozen for Experiments
+20, 21 and 23. Curves compare the modeled enclosure-average response with the
+mean of non-flatlined room sensors and the coefficient-free 0-D baseline.
+This is retrospective GH2 parameter-holdout evidence, not individual-sensor,
+prospective blind or outdoor LH2 validation.
+
 ## 6. Discussion and application envelope
 
 DEGALI is appropriate for qualified research and engineering screening of represented momentum-dominated LH2 releases when users retain the documented source assumptions and meteorological sensitivity. It is not, on the evidence here, a replacement for transient multiphase CFD when low-wind temporal evolution, complex obstacles, walls or site-specific source geometry determine the consequence. It is therefore not a substitute for transient multiphase CFD in a safety-critical design basis. The Test 6 mismatch is reported as an application limit rather than hidden by a fitted term.
@@ -428,6 +550,15 @@ that fails those evidence gates remains conditional or withheld. This
 positioning complements higher-fidelity transient and obstacle-resolving
 studies; it does not claim that DEGALI replaces them.
 
+The bounded enclosure branch gives DEGALI a second, deliberately different
+industrial role: rapid common-clock prediction of enclosure-average H2 for
+ventilation screening, alarm persistence and control-system prototyping. Its
+three parameter-holdout histories are materially stronger than the ideal
+well-mixed baseline, but the current evidence does not qualify individual
+sensor placement, local stratification, ignition risk or a different room and
+opening geometry. Those decisions still require spatial measurements, CFD or
+a new geometry-level calibration/validation package.
+
 ## 7. Conclusions
 
 1. A no-fit fast LH2 baseline was frozen and reproduced on 62 PRESLHY E3.5 arc maxima with MG 1.047, VG 1.425 and FAC2 0.839.
@@ -437,7 +568,9 @@ studies; it does not claim that DEGALI replaces them.
 5. The Hecht–Panda slope boundary rules out an unqualified transfer to every cryogenic free-jet regime.
 6. Peak and synchronized 20 s mean operators lead to materially different bias and scatter; both must accompany any validation claim.
 7. The historical and corrected paths change 11 of 18 declared-line classifications in two transfer-like cases, showing a decision consequence without claiming a safety setback.
-8. The supported claim is a reproducible LH2 fast-screening model with a validation envelope, not universal industrial certification or transient/obstacle-resolved prediction.
+8. The bounded enclosure response gives pooled MAE 0.282 vol%p, RMSE 0.332 vol%p and r = 0.980 on three frozen parameter holdouts, while remaining a retrospective GH2 enclosure-average result.
+9. The supported claim is a reproducible LH2 fast-screening model plus a separately scoped GH2 dynamic enclosure response, not universal industrial certification or transient/obstacle-resolved prediction.
+10. Independent GH2 spatial records exercise the evidence workflow, while the public CFD comparison defines an escalation path rather than an unmatched superiority claim.
 
 ## Declarations
 
@@ -448,7 +581,14 @@ byte-level retrieval audit for Trials 10, 20 and 21 is retained in the
 submission evidence package as `preslhy-public-retrieval-index-2026-10-09.json`.
 The conditional
 ELVHYS WP4.2 archive is publicly available at DOI [10.18710/JXJP0H](https://doi.org/10.18710/JXJP0H);
-its raw files are not copied into this repository. Local audit products are
+the USN ventilated car-park record is available at DOI
+[10.23642/USN.14405903](https://doi.org/10.23642/USN.14405903), and the
+HyTunnel-CS Pro-Science record is available at DOI
+[10.5281/zenodo.4668554](https://doi.org/10.5281/zenodo.4668554). The public
+MultHyFuel D2.2 report is available from the project deliverables page and is
+identified by URL and SHA-256 in the component-evidence audit. These three
+records are component/context evidence and are not pooled with the primary
+LH2 score. Raw external files are not copied into this repository. Local audit products are
 derived residuals; original third-party workbooks, raw time series and report
 files are not redistributed. The reported summaries can be regenerated when
 the corresponding evidence is available under its licence and the SHA-256
@@ -466,29 +606,37 @@ and archive its exact tag before that identifier replaces the one above. The aud
 `tools/audit_lh2_paper_baseline.py`,
 `tools/audit_applied_energy_comparison.py`,
 `tools/audit_time_aligned_uncertainty.py`,
-`tools/audit_decision_scenarios.py`. A publication snapshot must exclude
+`tools/audit_decision_scenarios.py`,
+`tools/audit_usn_carpark.py`,
+`tools/audit_hytunnel_ps.py`, and
+`tools/audit_multifidelity_cfd_evidence.py`. A publication snapshot must exclude
 original DEGADIS Fortran and external raw experimental data.
 The pinned `requirements-research.txt` file records the Python 3.12 runtime
 used for the reported audits and document builds; it is included in the
 submission manifest so that the numerical and artifact checks can be replayed
 without inferring package versions from the source code alone.
 
-**Funding.** `[AUTHOR TO CONFIRM: funder, grant number and the funder's role in
-study design, data collection, analysis, writing and the decision to submit;
-state "No external funding" if applicable.]`
+**Funding.** This work was supported by the Korea Institute of Energy
+Technology Evaluation and Planning (KETEP) through a grant funded by the
+Korean government (Ministry of Climate, Energy and Environment), grant number
+RS-2025-02311196. The funder had no role in study design, data collection,
+analysis, interpretation, manuscript preparation or the decision to submit.
 
-**CRediT authorship contribution statement.** `[AUTHOR TO CONFIRM: assign
-each named author only the contributions they actually made, using the CRediT
-taxonomy (for example, conceptualization, methodology, software, validation,
-formal analysis, investigation, data curation, visualization, writing,
-supervision, project administration and funding acquisition).]`
+**CRediT authorship contribution statement.** Ugwiyeon Lee:
+Conceptualization, Methodology, Software, Validation, Formal analysis,
+Investigation, Data curation, Visualization, Writing - original draft,
+Writing - review and editing, Project administration. Jungsu Lee, Seong-Yun
+Bae and Hakrae Kim: Writing - review and editing.
 
-**Declaration of competing interest.** `[AUTHOR TO CONFIRM: provide the
-journal's exact competing-interest statement, including "The authors declare
-that they have no known competing financial interests or personal
-relationships" if that is accurate.]`
+**Declaration of competing interest.** Ugwiyeon Lee reports financial support
+from the Korea Institute of Energy Technology Evaluation and Planning (KETEP)
+under grant RS-2025-02311196. The authors declare no other known competing
+financial interests or personal relationships that could have appeared to
+influence the work reported in this paper.
 
-**Acknowledgements.** `[AUTHOR TO CONFIRM: acknowledgements or "None".]`
+**Acknowledgements.** The authors acknowledge the support of the Korea
+Institute of Energy Technology Evaluation and Planning (KETEP) through grant
+RS-2025-02311196.
 
 ### Declaration of generative AI and AI-assisted technologies in the manuscript preparation process
 
@@ -513,7 +661,7 @@ the final work.
 
 [7] Health and Safety Executive, UK (n.d.). *ELVHYS WP4.2 — Leakage into cold room/tank connection space considering barriers and obstacles*. Public dataset, DOI: 10.18710/JXJP0H.
 
-[8] Hecht, A., and Panda, J. (2019). *Study of key parameters in modeling liquid hydrogen release and dispersion in open environment*. International Journal of Hydrogen Energy, 44. DOI: 10.1016/j.ijhydene.2018.07.058.
+[8] Hecht, E. S., and Panda, P. P. (2019). Mixing and warming of cryogenic hydrogen releases. *International Journal of Hydrogen Energy*, 44, 8960–8970. DOI: 10.1016/j.ijhydene.2018.07.058.
 
 [9] Hanna, S. R., Chang, J. C., and Strimaitis, D. G. (1993). Hazardous gas model evaluation with field observations. *Atmospheric Environment*, 27A, 2265–2285. DOI: 10.1016/0960-1686(93)90397-H.
 
@@ -521,4 +669,18 @@ the final work.
 
 [11] Giannissi, S. G., Venetsanos, A. G., Markatos, N., and Bartzis, J. G. (2014). CFD modeling of hydrogen dispersion under cryogenic release conditions. *International Journal of Hydrogen Energy*, 39, 15851–15863. DOI: 10.1016/j.ijhydene.2014.07.042.
 
-[12] Holborn, P., Ingram, J. M., and Benson, C. M. (2020). Modelling hazardous distances for large-scale liquid hydrogen pool releases. *International Journal of Hydrogen Energy*, 45, 23851–23871. DOI: 10.1016/j.ijhydene.2020.06.131.
+[12] Holborn, P. G., Benson, C. M., and Ingram, J. M. (2020). Modelling hazardous distances for large-scale liquid hydrogen pool releases. *International Journal of Hydrogen Energy*, 45, 23851–23871. DOI: 10.1016/j.ijhydene.2020.06.131.
+
+[13] Lach, A. W., and Gaathaug, A. V. (2021). Effect of mechanical ventilation on accidental hydrogen releases—large-scale experiments. *International Conference on Hydrogen Safety*. Dataset DOI: 10.23642/USN.14405903.
+
+[14] Grune, J., and Sempert, K. (2021). *Efficiency of mechanical ventilation on H2 dispersion: concentration, ventilation-flow and CAD data*. HyTunnel-CS Pro-Science dataset. DOI: 10.5281/zenodo.4668554.
+
+[15] Dixon, C., Lecocq, G., Stewart, J., and Vyazmina, E. (2022). *Assessment of dispersion for high-pressure H2*. MultHyFuel Deliverable D2.2.
+
+[16] Buttner, W., Hall, J., Coldrick, S., Hooker, P., and Wischmeyer, T. (2021). Hydrogen wide area monitoring of LH2 releases. *International Journal of Hydrogen Energy*, 46, 12497–12510. DOI: 10.1016/j.ijhydene.2020.08.266.
+
+[17] Ortiz Cebolla, R., Weidner, E., Buttner, W., Bonato, C., Hartmann, K., and Schmidt, K. (2018). Test methodologies for hydrogen sensor performance assessment: Chamber vs. flow-through test apparatus. *International Journal of Hydrogen Energy*, 43, 21149–21160. DOI: 10.1016/j.ijhydene.2018.09.107.
+
+[18] Witcofski, R. D., and Chirivella, J. E. (1984). Experimental and analytical analyses of the mechanisms governing the dispersion of flammable clouds formed by liquid hydrogen spills. *International Journal of Hydrogen Energy*, 9, 425–435. DOI: 10.1016/0360-3199(84)90064-8.
+
+[19] Middha, P., Ichard, M., and Arntzen, B. J. (2011). Validation of CFD modelling of LH2 spread and evaporation against large-scale spill experiments. *International Journal of Hydrogen Energy*, 36, 2620–2627. DOI: 10.1016/j.ijhydene.2010.03.122.

@@ -931,6 +931,7 @@ def test_field_screen_cli_writes_a_new_conditional_screening_record(tmp_path, ca
     source = tmp_path / "field-case.json"
     output = tmp_path / "field-execution.json"
     exact_case = _case()
+    exact_case["obstacles"] = []
     exact_case["scenario"]["source"]["mass_flow_kg_s"]["lower"] = 0.265
     exact_case["scenario"]["source"]["mass_flow_kg_s"]["upper"] = 0.265
     exact_case["scenario"]["weather"]["speed_m_s"]["lower"] = 2.0
@@ -975,7 +976,9 @@ def test_field_screen_cli_propagates_all_declared_case_bounds_before_allowing_sc
 ):
     source = tmp_path / "uncertain-field-case.json"
     output = tmp_path / "uncertain-field-execution.json"
-    source.write_text(json.dumps(_case()), encoding="utf-8")
+    case = _case()
+    case["obstacles"] = []
+    source.write_text(json.dumps(case), encoding="utf-8")
 
     code = main([
         "field-screen", str(source), "--uncertainty-envelope",
@@ -1002,6 +1005,7 @@ def test_field_screen_cli_runs_sensor_calibration_operational_envelope(
     source = tmp_path / "sensor-envelope-case.json"
     output = tmp_path / "sensor-envelope-execution.json"
     case = _case()
+    case["obstacles"] = []
     # Keep the source/weather and geometry exact so this test exercises the
     # detector-calibration envelope rather than a separate physical envelope.
     case["scenario"]["source"]["mass_flow_kg_s"] = _bounded(
@@ -1010,7 +1014,6 @@ def test_field_screen_cli_runs_sensor_calibration_operational_envelope(
     case["scenario"]["weather"]["speed_m_s"] = _bounded(
         2.0, "m/s", "met-A",
     )
-    case["obstacles"] = []
     for sensor in (
         case["scenario"]["sensor"],
         case["sensor_deployments"][0]["sensor"],
@@ -1065,6 +1068,7 @@ def test_field_screen_cli_runs_joint_source_sensor_operational_envelope(
     source = tmp_path / "joint-source-sensor-case.json"
     output = tmp_path / "joint-source-sensor-execution.json"
     case = _case()
+    case["obstacles"] = []
     case["scenario"]["source"]["mass_flow_kg_s"] = _bounded(
         0.265, "kg/s", "FT-source",
     )
@@ -1105,7 +1109,9 @@ def test_field_screen_cli_runs_a_fingerprinted_atmospheric_source_envelope(
     source_csv = tmp_path / "atmospheric-schedule.csv"
     source_case_path = tmp_path / "atmospheric-source-case.json"
     output = tmp_path / "field-source-execution.json"
-    case_path.write_text(json.dumps(_case()), encoding="utf-8")
+    case = _case()
+    case["obstacles"] = []
+    case_path.write_text(json.dumps(case), encoding="utf-8")
     source_csv.write_text(
         "time_s,rate_kg_s,rate_lower_kg_s,rate_upper_kg_s\n"
         "0,0.01,0.005,0.02\n"
@@ -1169,6 +1175,7 @@ def test_field_screen_cli_requires_an_envelope_for_atmospheric_source_case(
 def test_field_screen_cli_records_release_duration_uncertainty_corners(tmp_path, capsys):
     source = tmp_path / "duration-envelope-case.json"
     case = _case()
+    case["obstacles"] = []
     case["scenario"]["source"]["mass_flow_kg_s"]["lower"] = 0.265
     case["scenario"]["source"]["mass_flow_kg_s"]["upper"] = 0.265
     case["scenario"]["weather"]["speed_m_s"]["lower"] = 2.0
@@ -1196,6 +1203,7 @@ def test_field_screen_cli_propagates_declared_stability_alternatives(tmp_path, c
     source = tmp_path / "stability-field-case.json"
     output = tmp_path / "stability-field-execution.json"
     case = _case()
+    case["obstacles"] = []
     case["scenario"]["source"]["mass_flow_kg_s"]["lower"] = 0.265
     case["scenario"]["source"]["mass_flow_kg_s"]["upper"] = 0.265
     case["scenario"]["weather"]["speed_m_s"]["lower"] = 2.0
@@ -1278,6 +1286,7 @@ def test_field_screen_cli_refines_and_aggregates_every_measured_history_corner(
     source = tmp_path / "measured-field-envelope-case.json"
     output = tmp_path / "measured-field-envelope-execution.json"
     case = _measured_history_case(tmp_path)
+    case["obstacles"] = []
     case["scenario"]["weather"]["speed_m_s"]["lower"] = 2.0
     case["scenario"]["weather"]["speed_m_s"]["upper"] = 2.0
     case["scenario"]["source"]["location_m"] = [
@@ -1345,6 +1354,7 @@ def test_field_screen_cli_refines_pressure_driven_history_and_replays_it(
     source = tmp_path / "pressure-driven-field-envelope-case.json"
     output = tmp_path / "pressure-driven-field-envelope-execution.json"
     case = _pressure_driven_history_case(tmp_path)
+    case["obstacles"] = []
     case["pressure_driven_history"]["map"]["pressure_pa"]["absolute_half_width"] = 0.0
     case["pressure_driven_history"]["map"]["temperature_k"]["absolute_half_width"] = 0.0
     case["scenario"]["source"]["opening_area_m2"]["lower"] *= 0.9

@@ -46,8 +46,11 @@ class GaussianPuffConfig:
     ground_heat_input_w: float = 0.0
     wind_history: WindHistory | None = None
     wind_history_time_offset_s: float = 0.0
+    dense_entrainment_model: str = 'constant'
 
     def validate(self) -> None:
+        if self.dense_entrainment_model not in {'constant','parker_bulk_suppression'}:
+            raise ValueError('unsupported dense_entrainment_model')
         positive = {
             "duration_s": self.duration_s,
             "time_step_s": self.time_step_s,
@@ -344,6 +347,17 @@ def integrate_finite_gaussian_puff(
             config.shear_entrainment_coefficient * relative_speed
             + config.ambient_turbulence_coefficient * wind_speed
         )
+        if config.dense_entrainment_model == 'parker_bulk_suppression':
+            # Parker et al. (1987): E=.075/sqrt(1+718 Ri**2.4).
+            # Here E/E(0) suppresses the existing all-surface puff entrainment
+            # prior. This is an explicit gas-puff transfer hypothesis, not a
+            # claim that a Boussinesq inclined-current law validates TI021.
+            # Stable bulk Ri uses layer depth 2*half_z and slip speed. Neutral
+            # or positively buoyant puffs recover the old calculation exactly.
+            g_prime = GRAVITY_M_S2*max(density/thermodynamics.ambient_density-1.,0.)
+            ri = g_prime*(2*half_z)/max(relative_speed**2,1e-30)
+            suppression = (1+718*ri**2.4)**-.5
+            entrainment_velocity *= suppression
         surface = _ellipsoid_surface_area(half_x, half_y, half_z)
         ground_contact = centre[2] <= half_z * (1.0 + 1.0e-10)
         exposed_surface = surface * (0.5 if ground_contact else 1.0)
@@ -366,6 +380,16 @@ def integrate_finite_gaussian_puff(
         )
         force = drag_force.copy()
         force[2] += buoyancy_force
+        grounded_dense_constraint = (
+            ground_contact and density >= thermodynamics.ambient_density
+            and velocity[2] <= 0.0 and force[2] <= 0.0
+        )
+        if grounded_dense_constraint:
+            # The ground reaction balances downward buoyancy. Do not let the
+            # changing geometric half-height detach a grounded dense layer
+            # into alternating free-fall/contact steps: that made spreading
+            # dependent on dt. Positively buoyant puffs can still lift off.
+            force[2] = 0.0
         old_velocity = velocity.copy()
         momentum = momentum + dm * wind + force * dt
         mass += dm
@@ -395,6 +419,8 @@ def integrate_finite_gaussian_puff(
             raise RuntimeError("puff vertical scale became non-physical")
         new_velocity = momentum / mass
         centre = centre + 0.5 * (old_velocity + new_velocity) * dt
+        if grounded_dense_constraint and density >= thermodynamics.ambient_density:
+            centre[2] = half_z
         if centre[2] < half_z:
             centre[2] = half_z
             if momentum[2] < 0.0:

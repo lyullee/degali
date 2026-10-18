@@ -12,8 +12,8 @@ from pypdf import PdfReader
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "degali.ijhe-docx-draft-audit.v1"
-DOCX = ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-09.docx"
-PDF = ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-09.pdf"
+DOCX = ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-10.docx"
+PDF = ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-10.pdf"
 
 
 def audit() -> dict[str, Any]:
@@ -76,7 +76,7 @@ def audit() -> dict[str, Any]:
             },
             {
                 "id": "docx:inline-figures",
-                "status": "pass" if len(document.inline_shapes) >= 6 else "fail",
+                "status": "pass" if len(document.inline_shapes) >= 7 else "fail",
                 "detail": f"{len(document.inline_shapes)} inline figures present",
             },
         ]
@@ -87,7 +87,7 @@ def audit() -> dict[str, Any]:
         checks.append(
             {
                 "id": "pdf:rendered-pages",
-                "status": "pass" if pages == 12 else "warning",
+                "status": "pass" if pages == 15 else "warning",
                 "detail": f"{pages} rendered PDF pages",
             }
         )

@@ -3,7 +3,7 @@
 **Target:** *International Journal of Hydrogen Energy*
 **Scope:** the observation-operator-aware LH2 validation manuscript and its
 reproducible DEGALI research software
-**Last reviewed:** 2026-10-09
+**Last reviewed:** 2026-10-10
 
 This record separates what is already defensible in a manuscript from what
 still requires a new experiment or an accountable evidence package. It is a
@@ -33,11 +33,10 @@ recommends an explicit data-availability statement where the journal requests
 one. The repository audit checks the first and third items and records the
 graphical abstract as a separate SVG source; final file-format and pixel-size
 acceptance must still be confirmed in the submission portal.
-The current graphical-abstract SVG is 1400 x 760 px, which exceeds the
-Elsevier general minimum of 1328 x 531 px. Its 1.84:1 layout is intentionally
-kept unclipped for the three-panel workflow; the preferred 500:200 aspect
-ratio is recorded by the figure audit and should be confirmed in the portal
-before final upload rather than silently distorting the artwork.
+The current graphical-abstract SVG is 1400 x 560 px. It exceeds the Elsevier
+general minimum of 1328 x 531 px and exactly matches the preferred 500:200
+(2.5:1) aspect ratio. The figure audit rejects later edits that fall below
+either minimum dimension or depart materially from that submission ratio.
 The manuscript also uses a separate AI declaration immediately before the
 references, consistent with Elsevier's [generative-AI journal policy](https://www.elsevier.com/en-gb/about/policies-and-standards/generative-ai-policies-for-journals);
 the code-development use is additionally described in the reproducibility
@@ -49,15 +48,15 @@ sequential and fully cited.
 
 | Upload item | Current package state | Final action |
 |---|---|---|
-| Article type and title page | Research-article framing; author-neutral title page with main-text and abstract word counts | Confirm article type, author order, affiliations, postal addresses and corresponding-author details in the portal |
-| Abstract and keywords | 165-word abstract; six keywords; machine-checked | Confirm the portal's live word limit and paste the final author-approved text |
+| Article type and title page | Research-article framing; approved four-author title page with affiliations, ORCIDs, corresponding-author details and word counts | Verify the imported metadata in the portal |
+| Abstract and keywords | 196-word abstract; six keywords; machine-checked | Confirm the portal's live word limit and paste the final author-approved text |
 | Highlights | Five bullets; maximum 76 characters; standalone Word file plus source text | Upload `Highlights.docx` as the portal requests; retain the source text for audit |
-| Graphical abstract | Separate SVG and PDF; 1400 x 760 px; minimum-dimension check passes | Confirm the portal accepts the aspect ratio and final file type |
-| Main figures and tables | Six inline manuscript figures, two tables, seven audited PDF derivatives | Confirm figure permissions and portal artwork format; no re-export is currently required |
-| Supplementary information | Separate five-page DOCX and PDF derivatives | Upload as supplementary files, not as additional main-text pages |
+| Graphical abstract | Separate SVG and PDF; 1400 x 560 px; dimension and 2.5:1 ratio checks pass | Confirm the portal's accepted final file type |
+| Main figures and tables | Seven inline manuscript figures, three tables, eight audited PDF derivatives | Confirm figure permissions and portal artwork format; no re-export is currently required |
+| Supplementary information | Separate six-page layout-verified DOCX and PDF derivatives | Upload as supplementary files, not as additional main-text pages |
 | Data and code statements | Conditional raw-data access, public code DOI and the pinned `requirements-research.txt` runtime list are stated | Confirm licence/custodian wording and the exact release DOI after author approval |
-| Declarations | Funding, CRediT, competing interests, acknowledgements and AI fields are present but author-neutral | Replace all author-confirmation placeholders before final export |
-| Submission history and permissions | Exclusive-submission, preprint/prior-publication and third-party permissions fields remain open | Complete the cover-letter and portal declarations |
+| Declarations | Funding, CRediT, competing interests, acknowledgements and AI fields are author-approved and strict-exported | Verify the portal-generated declaration forms |
+| Submission history and permissions | Exclusive submission is confirmed and the distinct PSEP manuscript is disclosed by title, journal and submission date | Add the PSEP journal manuscript number if one is assigned before IJHE upload |
 
 This matrix is a submission control, not a substitute for the journal's live
 portal validation. The current Elsevier resources require a separate graphical
@@ -136,6 +135,7 @@ source context only; see
 | FFI/DNV is an independent far-field screen | **Conditional** | `docs/ffi-test6-decomposition.md`; FFI audit outputs | Retain the low-wind Test 6 mismatch as a limitation; do not fit a correction |
 | Cross-code performance ranking | **Excluded from submission** | manuscript, supplementary information and graphical abstract | Keep the paper focused on DEGALI; disclose the separate related manuscript to the editor in the cover letter |
 | The 3-D transient solver is numerically conservative and convergent | **Ready as numerical verification** | `docs/transient-dense-gas-3d.md`; `outputs/transient-3d-error-study-2026-10-08/error_study.md` | State that the reference is numerical, not measured validation |
+| The bounded GH2 enclosure-average response transfers across USN experiments | **Ready as retrospective parameter-holdout evidence** | `docs/ijhe-multifidelity-evidence-2026-10-10.md`; `outputs/usn-enclosure-dynamic-validation-2026-10-10/metrics.json` | Keep Exp19 as the sole identification case, Exp20/21/23 as frozen holdouts, and do not present this as prospective blind or individual-sensor validation |
 | The model predicts site-specific obstacle wakes or complex facilities | **Not supported** | `docs/field-deployment-roadmap-2026-10-05.md`; `docs/ijhe-ffi-site-geometry-boundary-2026-10-09.md`; obstacle gate records | The FFI pad has known structures, but the six-arc lane does not resolve them; do not use this as an IJHE headline claim without matched measured obstacle data |
 | The field workflow is operationally deployable | **Conditional** | `docs/field-evidence-manifest.md`; `docs/field-conditional-review.md` | Require source/weather/receptor/sensor/operator identities and SHA-256 fingerprints |
 | A common-clock LH2 event can be reconciled without hidden joins | **Conditional** | `docs/ijhe-preslhy-trial10-conditional-evidence-2026-10-09.md`; derived `FieldEvidenceManifest` | Obtain channel calibration and measured site geometry before operational promotion |
@@ -148,10 +148,11 @@ source text and the standalone `Highlights.docx`,
 [graphical abstract](../IJHE_GRAPHICAL_ABSTRACT.svg) and
 [cover-letter draft](../IJHE_COVER_LETTER_DRAFT.md) files. The figure/table
 generation register is in [docs/ijhe-figure-table-register.md](ijhe-figure-table-register.md).
-An author-neutral assembled hand-off is generated by
+An author-approved, evidence-bounded assembled hand-off is generated by
 `tools/build_ijhe_upload_bundle.py` into
-`outputs/IJHE_UPLOAD_DRAFT_LATEST_2026-10-09_DEGALI_ONLY_V2/`; its bundle manifest records hashes and
-keeps `final_upload_allowed=false` until author and evidence gates are closed.
+`outputs/IJHE_UPLOAD_AUTHOR_APPROVED_2026-10-10_DEGALI_DYNAMIC_V11/`; its bundle manifest records hashes and
+keeps `final_upload_allowed=false` while the matched-event evidence and final
+portal/permissions checks remain open. The author gate itself is closed.
 The supplied legacy related-submission Word files are explicitly separated in
 [docs/ijhe-word-artifact-boundary.md](ijhe-word-artifact-boundary.md) and are
 not the DEGALI upload source.
@@ -161,7 +162,7 @@ The combined hand-back sheet for those fields and the matched-event evidence
 gate is [docs/ijhe-closeout-worksheet.md](ijhe-closeout-worksheet.md).
 The final source and derived-figure hash record is generated by
 `tools/build_ijhe_submission_manifest.py` into the ignored
-`outputs/ijhe-submission-manifest-2026-10-09.json` file.
+`outputs/ijhe-submission-manifest-2026-10-10.json` file.
 The requirement-by-requirement completion record is in
 [docs/ijhe-final-gap-audit-2026-10-09.md](ijhe-final-gap-audit-2026-10-09.md).
 The exact export request for the remaining calibration- and geometry-complete
@@ -172,9 +173,9 @@ recorded separately in
 [docs/ijhe-smedis-transfer-boundary-2026-10-09.md](ijhe-smedis-transfer-boundary-2026-10-09.md);
 those generic-gas records are not pooled with the LH2 scores.
 The Highlights and Supplementary Information are content-ready. The cover
-letter contains explicit author placeholders and must be reviewed before
-submission; it is not treated as a completed declaration by the automated
-audit.
+letter contains the approved corresponding-author, funding, competing-interest,
+exclusive-submission and related-manuscript disclosures and has no author
+placeholders.
 
 ## Minimum IJHE revision package
 
@@ -247,8 +248,8 @@ accuracy.
 
 ## Decision
 
-The package is ready for an **IJHE manuscript draft and internal co-author
-review**. It is not yet ready for a claim of universal transient or obstacle
+The package is ready for an **author-approved IJHE manuscript and final portal
+review**. It is not ready for a claim of universal transient or obstacle
 validation. The blocking item for a stronger operational claim is external,
 matched, time-resolved field evidence—not another fitted coefficient or a
 finer numerical grid.

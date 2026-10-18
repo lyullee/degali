@@ -1,4 +1,4 @@
-from tools.audit_ijhe_figure_artifacts import audit
+from tools.audit_ijhe_figure_artifacts import GRAPHICAL_ABSTRACT_PREFERRED_ASPECT, audit
 
 
 def test_graphical_abstract_meets_elsevier_minimum_dimensions():
@@ -7,3 +7,4 @@ def test_graphical_abstract_meets_elsevier_minimum_dimensions():
     assert record["status"] == "valid"
     assert record["pixel_width"] >= 1328
     assert record["pixel_height"] >= 531
+    assert abs(record["aspect_ratio"] - GRAPHICAL_ABSTRACT_PREFERRED_ASPECT) <= 0.01

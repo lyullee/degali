@@ -222,14 +222,18 @@ def run_manifest_bound_time_history(
         return TimeHistoryExecutionResult(gate, 0, None, ())
     codes.append("manifest_files_verified")
 
-    readiness = manifest.readiness_record()
+    # Quantitative transient scoring requires explicit clock alignment
+    # metadata in addition to the legacy sensor/operator package gate.
+    readiness = manifest.quantitative_readiness_record()
     if readiness["status"] == "conditional":
         codes.extend(("manifest_metadata_conditional", "execution_conditional"))
         reasons.extend(
             f"manifest metadata is conditional: {item}"
             for item in readiness["missing_requirements"]
         )
-        actions.append("supply the missing sensor registry/operator metadata before promotion")
+        actions.append(
+            "supply the missing sensor/operator/clock metadata before promotion"
+        )
     else:
         codes.append("manifest_metadata_complete")
 

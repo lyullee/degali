@@ -1,4 +1,4 @@
-# IJHE figure derivative map — 2026-10-09
+# IJHE figure derivative map — updated 2026-10-10
 
 The seven-page figure PDF was originally generated in source-directory order,
 which is not the manuscript figure order. This explicit map is the control
@@ -12,13 +12,16 @@ record used for the current DOCX/PDF rebuild:
 | 4 | `tmp/ijhe-lh2-paper-figures/ffi-arc-residual-map.svg` | `figure-4.pdf` | `figure-4.png` |
 | 5 | `tmp/ijhe-decision-scenarios/decision_lfl_distances.svg` | `figure-5.pdf` | `figure-5.png` |
 | 6 | `outputs/transient-3d-error-study-2026-10-08/transient-3d-convergence.svg` | `figure-6.pdf` | `figure-6.png` |
+| 7 | `outputs/usn-enclosure-dynamic-validation-2026-10-10/usn_enclosure_parameter_holdout.svg` | `figure-8.pdf` | `figure-7.png` |
 
 The seventh PDF derivative is retained as an auxiliary page for the E3.5
 source/wind envelope (`figure-7.pdf`); it is not embedded as a main-manuscript
-figure. The combined seven-page PDF was reordered using the page sequence
+figure. The earlier combined seven-page PDF was reordered using the page sequence
 `1, 4, 2, 5, 7, 3, 6` from the original source-order export. The review PNG
 for Figure 5 was regenerated directly from the canonical decision-line SVG so
-that its content matches the caption.
+that its content matches the caption. The 2026-10-10 v3 combined PDF appends
+the new enclosure result as page 8; its separate derivative is `figure-8.pdf`
+because `figure-7.pdf` remains the auxiliary envelope page.
 
 This map is a submission-control artifact, not a new scientific result. The
 canonical SVG files remain the authoritative artwork and retain their own

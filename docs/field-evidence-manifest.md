@@ -28,6 +28,23 @@ used as evidence of a qualified model. Missing channels are stopped earlier by
 `field-audit` as `partial` or `withheld`, and digest/path drift is a hard
 verification failure.
 
+For quantitative transient scoring the package now emits a separate
+`quantitative_evidence_readiness` record.  The selected common-clock file must
+also declare `reference_time_utc`, `synchronization_method`, `offset_s`,
+`uncertainty_s`, and `covered_channels` containing at least
+`source_boundary`, `weather`, and `receptor_observations`.  A legacy clock file
+that contains only `common_clock_id` remains traceable but is automatically
+`conditional` for scoring.  This prevents a shared label from being mistaken
+for a verified time alignment.
+
+The metadata may be a one-row CSV or a JSON object (optionally nested under
+`clock_alignment`), for example:
+
+```text
+common_clock_id,reference_time_utc,synchronization_method,offset_s,uncertainty_s,covered_channels
+clock-a,2026-09-21T00:00:00Z,PTP,0.012,0.004,source_boundary;weather;receptor_observations
+```
+
 ## Python boundary
 
 ```python
@@ -72,6 +89,15 @@ rechecks all five files, so changing a source, weather, geometry, receptor or
 clock file requires a fresh audit and manifest. No manifest is generated for
 the current connected folders because their required channels remain missing.
 
+For the public USN/FFI wide-table exports, the audit accepts the unlabeled
+leading row-index column and records the raw source/sensor histories with
+SHA-256, row counts and the separate sensor registry. The reproducible
+`tools/audit_ffi_field_evidence_manifest.py` intake writes
+`outputs/ffi-o1-field-evidence-intake-2026-10-14-v2.json` and the corresponding
+O2 record. These are deliberately `withheld` intake records—not manifests:
+weather, machine-registered beam geometry, a source/sensor synchronization
+transform and event calibration certificates are still absent.
+
 The same explicit boundary is available from the CLI. The command consumes a
 verified `field-audit` execution artifact and requires one `--selected-path`
 for each channel; it never infers the event join or overwrites an existing
@@ -112,6 +138,13 @@ The command reports `selected_files_verified=true` and keeps
 If a selected file is missing, changed, or unreadable, it exits with code 2
 and emits `evidence_readiness.status="withheld"` with the failure reason; it
 never reports a stale package as verified.
+
+The resolved O1 and fast→resolved→fast hybrid runners can attach the same
+execution manifest with `--field-evidence-manifest`. They copy its event,
+sensor-set, operator and quantitative-readiness record into the solver output.
+For a production score, add `--require-quantitative-manifest`; a conditional
+clock or calibration package then fails before the expensive solve. Without
+that flag, the run remains an explicitly conditional physics witness.
 
 To bind the manifest into a strict matched-sensor case, add this optional
 object beside `validation_evidence` in `degali.field-validation-input.v1`:

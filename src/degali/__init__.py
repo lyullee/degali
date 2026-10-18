@@ -184,6 +184,24 @@ from .addons.semi_fv_obstacle import (
     run_semi_fv_refinement_study,
     solve_semi_fv_obstacle,
 )
+from .addons.fast_obstacle_transport import (
+    FAST_OBSTACLE_TRANSPORT_SCHEMA,
+    FastObstacleReceptor,
+    FastObstacleTransportConfig,
+    FastObstacleTransportResult,
+    solve_fast_obstacle_transport,
+)
+from .addons.hybrid_interface import (
+    InterfaceFluxLedger, HybridInterfaceCoupler, conservative_interface_transfer,
+)
+from .addons.hybrid_amr import ObstaclePatchBounds, make_obstacle_patch_bounds, conservative_patch_remap
+from .addons.hybrid_amr_plan import HybridAMRRunPlan
+from .addons.resolved_obstacle_flow_2d import (
+    RESOLVED_OBSTACLE_FLOW_2D_SCHEMA,
+    ResolvedObstacleFlow2DConfig,
+    ResolvedObstacleFlow2DResult,
+    solve_resolved_obstacle_flow_2d,
+)
 from .addons.field_lh2 import (
     FieldBlowdownVapourSchedule,
     FieldLH2FlashResult,
@@ -472,6 +490,14 @@ __all__ = [
     "SemiFVDiagnostics", "SemiFVReceptor", "SemiFVReceptorTrace",
     "SemiFVReceptorRefinement", "SemiFVRefinementStudy", "SemiFVResult",
     "solve_semi_fv_obstacle", "run_semi_fv_refinement_study",
+    "FAST_OBSTACLE_TRANSPORT_SCHEMA", "FastObstacleReceptor",
+    "FastObstacleTransportConfig", "FastObstacleTransportResult",
+    "solve_fast_obstacle_transport",
+    "InterfaceFluxLedger", "HybridInterfaceCoupler", "conservative_interface_transfer",
+    "ObstaclePatchBounds", "make_obstacle_patch_bounds", "conservative_patch_remap",
+    "HybridAMRRunPlan",
+    "RESOLVED_OBSTACLE_FLOW_2D_SCHEMA", "ResolvedObstacleFlow2DConfig",
+    "ResolvedObstacleFlow2DResult", "solve_resolved_obstacle_flow_2d",
     "FieldBlowdownVapourSchedule", "FieldLH2FlashResult", "FieldLH2SourcePreparation",
     "pressure_driven_lh2_mass_flow", "release_with_pressure_driven_lh2_mass_flow",
     "lh2_flash_source_from_release", "prepare_field_lh2_flash",

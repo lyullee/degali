@@ -22,7 +22,7 @@ def test_ijhe_upload_bundle_is_author_neutral_and_hash_pinned(tmp_path):
     assert result["author_neutral"] is True
     assert result["final_upload_allowed"] is False
     assert result["missing_files"] == []
-    assert len(result["copied_files"]) == 35
+    assert len(result["copied_files"]) == 39
     assert any(
         item["name"] == "External_evidence_search.md"
         for item in result["copied_files"]
@@ -63,9 +63,37 @@ def test_ijhe_upload_bundle_is_author_neutral_and_hash_pinned(tmp_path):
     assert (bundle / "PRESLHY_Trial10_field_audit_execution.json").is_file()
     assert (bundle / "PRESLHY_conditional_manifest_index.json").is_file()
     assert (bundle / "PRESLHY_public_retrieval_index.json").is_file()
+    assert (bundle / "Multifidelity_evidence.md").is_file()
+    assert (bundle / "USN_enclosure_validation_report.md").is_file()
+    assert (bundle / "USN_enclosure_validation_metrics.json").is_file()
+    assert (bundle / "figures" / "figure-8.pdf").is_file()
     status_text = (bundle / "BUNDLE_STATUS.md").read_text(encoding="utf-8")
     assert "third-party raw" in status_text
     assert "sensor calibration status `specification_only`" in status_text
+
+
+@pytest.mark.skipif(
+    not Path("outputs/ijhe-manuscript-author-approved-2026-10-10.docx").is_file(),
+    reason="requires the strict author-approved IJHE artifacts",
+)
+def test_ijhe_upload_bundle_can_close_only_the_author_gate(tmp_path):
+    result = build(tmp_path / "approved-bundle", author_approved=True)
+
+    assert result["bundle_status"] == "author_approved_evidence_bounded"
+    assert result["author_neutral"] is False
+    assert result["author_approval_recorded"] is True
+    assert result["final_upload_allowed"] is False
+    assert result["preslhy_evidence_gate"]["status"] == "conditional"
+    assert len(result["copied_files"]) == 41
+    bundle = tmp_path / "approved-bundle"
+    assert (bundle / "Author_approval.md").is_file()
+    assert (bundle / "Cover_letter.docx").is_file()
+    assert (bundle / "Manuscript.docx").read_bytes() == Path(
+        "outputs/ijhe-manuscript-author-approved-2026-10-10.docx"
+    ).read_bytes()
+    status_text = (bundle / "BUNDLE_STATUS.md").read_text(encoding="utf-8")
+    assert "author metadata and declarations in this bundle are approved" in status_text
+    assert "matched field-evidence gate remains conditional" in status_text
 
 
 def test_ijhe_upload_bundle_rejects_stale_manifest(tmp_path):

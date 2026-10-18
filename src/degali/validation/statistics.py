@@ -15,10 +15,12 @@ where an exclusion zone is actually drawn.
     VG = \\exp\\overline{(\\ln C_o - \\ln C_p)^2}
 
 ``MG`` is the geometric mean bias: 1 is unbiased, above 1 means the model
-under-predicts, below 1 means it over-predicts.  ``VG`` is the geometric
-variance, the scatter about that bias, and 1 is perfect.  ``FAC2`` is the
-fraction of predictions within a factor of two of the observation, which is
-the measure practitioners trust most because it is hard to game.
+under-predicts, below 1 means it over-predicts.  In this conventional Hanna
+definition, ``VG`` is the exponentiated *uncentred* mean-square log error.  It
+therefore contains both systematic log bias and residual log scatter; it is
+not the variance after removing ``MG``.  A value of 1 is perfect.  ``FAC2`` is
+the fraction of predictions within a factor of two of the observation, which
+is the measure practitioners trust most because it is hard to game.
 
 Note the sign convention: ``MG`` is defined observed-over-predicted, so a
 model that reads high gives ``MG < 1``.  Getting this backwards is easy and

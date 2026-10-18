@@ -219,6 +219,34 @@ def test_malformed_csv_structure_is_not_promoted(tmp_path, name, contents):
     assert any("unreadable structured file: ValueError" in note for note in candidate.notes)
 
 
+def test_ffi_wide_csv_is_parsed_and_remains_withheld_without_joined_geometry(tmp_path):
+    path = tmp_path / "23_FFI_P101_T00003.csv"
+    path.write_text(
+        ",mass flow meter 1,filling pressure sensor,various data,flow time [s],"
+        "mass flow meter 1 [g/s],filling pressure [bar],h2 sensor time,"
+        "sensor 1 h2 concentration [%],sensor 2 h2 concentration [%]\n"
+        "0,species - h2,mean pressure [bar] - 0.58,total mean mass flow - 0.47,"
+        "0.0,0.0009,-0.02,0.0,0.1,0.2\n"
+        "1,mean mass flow - 0.47,std pressure - 0.02,mean channel temperature [C] - 24,"
+        "0.01,0.0010,-0.02,0.68,0.2,0.3\n",
+        encoding="utf-8",
+    )
+
+    audit = audit_field_evidence(tmp_path)
+
+    assert audit.status == "withheld"
+    candidate = audit.candidates[0]
+    assert candidate.row_count == 2
+    assert candidate.detected_channels == ()
+    assert "flow_time_s" in candidate.fields
+    assert "sensor_1_h2_concentration" in candidate.fields
+    assert not any("unreadable structured file" in note for note in candidate.notes)
+    assert any("FFI wide-table layout detected" in note for note in candidate.notes)
+    assert any("without co-located sensor coordinates" in note for note in candidate.notes)
+    assert audit.diagnostic_counts["release_rate_without_source_identity"] == 1
+    assert audit.diagnostic_counts["sensor_time_without_clock"] == 1
+
+
 def test_large_csv_is_stream_validated_but_channel_sample_is_bounded(tmp_path):
     path = tmp_path / "large.csv"
     rows = ["source_boundary_id,mass_flow_kg_s\n"]

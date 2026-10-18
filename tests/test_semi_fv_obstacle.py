@@ -65,6 +65,7 @@ def test_semi_fv_without_obstacle_conserves_mass():
         duration_s=2.0, time_step_s=0.02, source_rate_kg_s=0.2,
     ))
     assert result.diagnostics.applicability == "accepted"
+    assert result.diagnostics.quantitative_prediction_allowed
     assert result.diagnostics.maximum_mass_residual_kg < 1.0e-10
     assert result.diagnostics.final_mass_residual_kg == pytest.approx(0.0, abs=1.0e-12)
     assert result.diagnostics.source_mass_ledger_residual_kg == pytest.approx(0.0, abs=1.0e-15)
@@ -102,6 +103,10 @@ def test_semi_fv_reports_obstacle_contact_and_conserves_routed_inventory():
     ))
     assert result.diagnostics.obstacle_contact
     assert result.diagnostics.applicability == "conditional"
+    assert not result.diagnostics.quantitative_prediction_allowed
+    assert "quantitative obstacle concentration prediction is prohibited" in (
+        result.diagnostics.warnings[0]
+    )
     assert 0.0 <= result.diagnostics.diverted_mass_fraction <= 1.0
     assert result.diagnostics.maximum_mass_residual_kg < 1.0e-9
     assert result.diagnostics.final_mass_residual_kg == pytest.approx(0.0, abs=1.0e-12)
@@ -211,6 +216,29 @@ def test_linear_source_schedule_integrates_node_values_and_conserves_transport_m
 
     assert result.diagnostics.mass_injected_kg == pytest.approx(3.5)
     assert result.diagnostics.final_mass_residual_kg == pytest.approx(0.0, abs=1.0e-12)
+
+
+@pytest.mark.parametrize("rate_operator", ("piecewise_constant", "linear"))
+def test_source_schedule_interval_integrates_only_local_segments(rate_operator):
+    times = tuple(index * 0.01 for index in range(10_001))
+    rates = (
+        tuple(2.0 for _ in times)
+        if rate_operator == "piecewise_constant"
+        else tuple(time for time in times)
+    )
+    schedule = SourceRateSchedule(
+        time_s=times, rate_kg_s=rates, source_id="dense-measured-history",
+        rate_operator=rate_operator,
+    )
+
+    integral = schedule.mass_between(99.95, 100.0)
+
+    expected = (
+        2.0 * 0.05
+        if rate_operator == "piecewise_constant"
+        else (100.0**2 - 99.95**2) / 2.0
+    )
+    assert integral == pytest.approx(expected)
 
 
 def test_source_schedule_rejects_an_unknown_rate_operator():

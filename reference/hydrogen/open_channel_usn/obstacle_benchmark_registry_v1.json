@@ -1,0 +1,119 @@
+{
+  "schema": "degali.ffi-open-channel-obstacle-benchmark.v1",
+  "status": "conditional_geometry_review_required",
+  "sources": {
+    "experiment_dataset_doi": "10.23642/USN.26117989",
+    "experiment_article_doi": "10.1016/j.jlp.2025.105669",
+    "companion_les_article_doi": "10.1016/j.ijhydene.2024.10.038",
+    "local_dataset_readme": "reference/hydrogen/open_channel_usn/ReadMe.txt",
+    "coordinates_source": "Henriksen et al. (2025), Table 1, Locations of the hydrogen sensors in the channel",
+    "article_sensor_accuracy_evidence": "Henriksen et al. (2025), DOI 10.1016/j.jlp.2025.105669, reports XEN-5320 accuracy as ±1%",
+    "manufacturer_sensor_datasheet": "https://xensor.nl/images/pdf-files/XEN-5320/Thermal_Conductivity_Gas_Sensor_XEN-5320-HP-USB-A.pdf"
+  },
+  "coordinate_frame": {
+    "origin": "closed rear end, floor and one side wall; physical left/right identity must be checked against article Fig. 2 before an asymmetric model is oriented",
+    "x_axis": "channel width, 0 to 0.9 m",
+    "y_axis": "channel length, positive from closed rear end toward open end, 0 to 5.8 m",
+    "z_axis": "vertical from floor, 0 to 0.8 m",
+    "unit": "m",
+    "frame_orientation_note": "The article table supplies x/y/z values. Left/right handedness of x is immaterial to the symmetric unobstructed channel but must be reconciled to the figure before asymmetric geometry is used."
+  },
+  "facility": {
+    "channel_dimensions_m": {"x_width": 0.9, "y_length": 5.8, "z_height": 0.8},
+    "rear_boundary": "closed at y=0",
+    "downstream_boundary": "open at y=5.8 m to expanded region",
+    "release": {"type": "ceiling opening", "diameter_m": 0.0046, "center_y_m": 0.5},
+    "ambient_temperature_k": 293.0
+  },
+  "obstacle": {
+    "present_in_cases": ["O1", "O2"],
+    "reported_location_y_from_closed_end_m": 2.1,
+    "location_anchor_convention": "unresolved: source text does not state whether 2.1 m identifies the obstacle leading face, center, or another datum",
+    "reported_dimensions_m": {"length_y": 1.0, "transverse_width_axis_unresolved": 0.8, "height_z": 0.75},
+    "reported_blockage_ratio": 0.368,
+    "article_configuration_evidence": {
+      "source": "Henriksen et al. (2025), Materials and methods, p. 2; Fig. 2(b), p. 3",
+      "first_configuration": "the two top cross beams only; this is the suffix-1 configuration mapped by the O1 and O2 trial IDs",
+      "reported_configuration_blockage_ratios": [0.37, 0.45, 0.53],
+      "higher_configurations": "the second configuration adds the upper and middle cross beams; the third adds all cross beams",
+      "interpretation_limit": "The obstacle is a wooden beam assembly, not established as a solid rectangular prism. The paper figure and prose do not provide machine-readable individual beam cross-sections, exact x/y registration, or the 2.1 m location datum."
+    },
+    "conditional_rectangular_projection_check": {
+      "assumption": "reported 0.8 m width lies transverse to flow and shape is a solid rectangle",
+      "projected_obstacle_area_m2": 0.6,
+      "channel_cross_section_area_m2": 0.72,
+      "implied_blockage_ratio": 0.8333333333333334,
+      "reported_minus_implied_percentage_points": -46.53333333333334,
+      "interpretation": "diagnostic only; this mismatch rejects the simple solid-rectangle interpretation, not the published beam-assembly blockage ratio"
+    },
+    "shape_and_registration": "Fig. 2(b) confirms a cross-beam assembly; the article states configuration 1 has two top cross beams, configuration 2 adds upper and middle cross beams, and configuration 3 has all cross beams. Individual beam sections and full placement are not dimensioned, so do not create a quantitative solid geometry yet",
+    "quantitative_geometry_allowed": false,
+    "geometry_gate_reasons": [
+      "The reported 36.8% (rounded to 0.37 for configuration 1) applies to a wooden assembly with two top cross beams; the individual beam cross-sections and exact projection cannot be reconstructed from the published dimensions and figure.",
+      "Obstacle x placement and the y-location anchor are not textually specified; the reported 0.8 m width-axis label is also inconsistent/ambiguous in the prose."
+    ]
+  },
+  "case_crosswalk": [
+    {"article_case": "A", "article_trials": ["test-02-0A", "test-02-0B"], "dataset_files": ["23_FFI_P101_T00012.csv", "23_FFI_P101_T00013.csv"], "dataset_csv_sha256": ["df3614c387a34a99cdf5abd044d41293ebd1fe84030707e96c97959e8fcb628c", "a03ef45ab882b95d075bf471680eeb1d23f17cc11c510dca35314d5b818174bb"], "obstacle": false, "article_les_source_rate_g_s": 0.086},
+    {"article_case": "O1", "article_trials": ["test-02-1A", "test-02-1B"], "dataset_files": ["23_FFI_P101_T00027.csv", "23_FFI_P101_T00028.csv"], "dataset_csv_sha256": ["4cfadb7c6f49fd123ae08294140f96627629199b7f998ac0eeb4e923ba4075d7", "e04cc3999a5222399e17786ea90505803ed3849b82dc18f9998b70c8ceb91a81"], "obstacle": true, "article_les_source_rate_g_s": 0.091},
+    {"article_case": "E", "article_trials": ["test-05-0A", "test-05-0B"], "dataset_files": ["23_FFI_P101_T00003.csv", "23_FFI_P101_T00004.csv"], "dataset_csv_sha256": ["723c2882b47db2cad09a27b19ca8788e1e469a18886fdfca62c3ae1b2b931b83", "95537f6d44885fe1437d0267fdfdb4904d380f506f3d5ff6f6fd40545827d615"], "obstacle": false, "article_les_source_rate_g_s": 0.48},
+    {"article_case": "O2", "article_trials": ["test-05-1A", "test-05-1B"], "dataset_files": ["23_FFI_P101_T00029.csv", "23_FFI_P101_T00030.csv"], "dataset_csv_sha256": ["b4391e5eb61c59c51804ab5a05c6f975dc2c5ebc69af536ce456dbc54c39e191", "5eed7a2642b52343afb7b4a496347ad87879a1b21c998e4e2a073b0db2408aa8"], "obstacle": true, "article_les_source_rate_g_s": 0.45}
+  ],
+  "sensors": [
+    {"id": "sensor 1", "placement": "top", "centerline": false, "x_m": 0.77, "y_m": 0.24, "z_m": 0.80},
+    {"id": "sensor 2", "placement": "top", "centerline": true, "x_m": 0.46, "y_m": 0.00, "z_m": 0.80},
+    {"id": "sensor 3", "placement": "mid-high", "centerline": true, "x_m": 0.48, "y_m": 0.25, "z_m": 0.52},
+    {"id": "sensor 4", "placement": "top", "centerline": false, "x_m": 0.13, "y_m": 0.26, "z_m": 0.80},
+    {"id": "sensor 5", "placement": "mid-high", "centerline": true, "x_m": 0.48, "y_m": 1.33, "z_m": 0.52},
+    {"id": "sensor 6", "placement": "top", "centerline": true, "x_m": 0.46, "y_m": 1.11, "z_m": 0.80},
+    {"id": "sensor 7", "placement": "top", "centerline": false, "x_m": 0.90, "y_m": 2.22, "z_m": 0.80},
+    {"id": "sensor 8", "placement": "mid-high", "centerline": true, "x_m": 0.47, "y_m": 2.46, "z_m": 0.52},
+    {"id": "sensor 9", "placement": "top", "centerline": true, "x_m": 0.46, "y_m": 2.22, "z_m": 0.80},
+    {"id": "sensor 10", "placement": "top", "centerline": false, "x_m": 0.74, "y_m": 2.45, "z_m": 0.80},
+    {"id": "sensor 11", "placement": "top", "centerline": false, "x_m": 0.15, "y_m": 2.44, "z_m": 0.80},
+    {"id": "sensor 12", "placement": "top", "centerline": false, "x_m": 0.00, "y_m": 2.22, "z_m": 0.80},
+    {"id": "sensor 13", "placement": "mid-high", "centerline": true, "x_m": 0.47, "y_m": 3.54, "z_m": 0.52},
+    {"id": "sensor 14", "placement": "top", "centerline": true, "x_m": 0.46, "y_m": 3.31, "z_m": 0.80},
+    {"id": "sensor 15", "placement": "top", "centerline": false, "x_m": 0.78, "y_m": 4.65, "z_m": 0.80},
+    {"id": "sensor 17", "placement": "top", "centerline": true, "x_m": 0.46, "y_m": 4.39, "z_m": 0.80},
+    {"id": "sensor 18", "placement": "mid-high", "centerline": true, "x_m": 0.47, "y_m": 4.63, "z_m": 0.52},
+    {"id": "sensor 19", "placement": "top", "centerline": false, "x_m": 0.14, "y_m": 4.68, "z_m": 0.80},
+    {"id": "sensor 20", "placement": "bottom", "centerline": false, "x_m": 0.75, "y_m": 0.24, "z_m": 0.00},
+    {"id": "sensor 21", "placement": "bottom", "centerline": true, "x_m": 0.45, "y_m": 0.00, "z_m": 0.00},
+    {"id": "sensor 22", "placement": "bottom", "centerline": false, "x_m": 0.16, "y_m": 0.24, "z_m": 0.00},
+    {"id": "sensor 23", "placement": "mid-low", "centerline": true, "x_m": 0.47, "y_m": 0.24, "z_m": 0.28},
+    {"id": "sensor 24", "placement": "mid-low", "centerline": true, "x_m": 0.46, "y_m": 1.33, "z_m": 0.27},
+    {"id": "sensor 25", "placement": "bottom", "centerline": true, "x_m": 0.47, "y_m": 1.10, "z_m": 0.00},
+    {"id": "sensor 26", "placement": "mid-low", "centerline": true, "x_m": 0.46, "y_m": 2.46, "z_m": 0.27},
+    {"id": "sensor 27", "placement": "bottom", "centerline": true, "x_m": 0.47, "y_m": 2.23, "z_m": 0.00},
+    {"id": "sensor 28", "placement": "mid-low", "centerline": true, "x_m": 0.47, "y_m": 3.56, "z_m": 0.27},
+    {"id": "sensor 29", "placement": "mid-low", "centerline": true, "x_m": 0.47, "y_m": 4.63, "z_m": 0.27},
+    {"id": "sensor 30", "placement": "bottom", "centerline": true, "x_m": 0.46, "y_m": 4.44, "z_m": 0.00}
+  ],
+  "sensor_instrumentation": {
+    "model_reported_by_article": "Xensor XEN-5320",
+    "article_reported_accuracy_text": "±1%",
+    "manufacturer_datasheet_inaccuracy": "1% full scale for H2 and He (preliminary specification)",
+    "manufacturer_datasheet_range": "100 ppm to 100 vol%",
+    "full_scale_interpretation_for_0_to_100_vol_percent_range": "±1 vol%-point, if the preliminary datasheet specification applies to the installed units and configuration",
+    "derived_relative_uncertainty_if_that_interpretation_applies": {
+      "at_2_vol_percent": "50% of reading",
+      "at_4_vol_percent": "25% of reading"
+    },
+    "event_specific_calibration_certificate_available": false,
+    "scoring_policy": "retain the paper claim and manufacturer full-scale specification as attributed uncertainty metadata; do not assert event-level accuracy without certificates"
+  },
+  "time_operator": {
+    "dataset_source_and_sensor_clocks_are_distinct": true,
+    "zero_time_semantics": "all four local O1/O2 repeats record both elapsed-time columns starting at 0 s, consistent with the article's release-relative origin; preserve the columns separately and do not infer drift-free synchronization",
+    "coverage_audit": "outputs/ffi-shared-elapsed-origin-audit-2026-10-13-v4/ffi-shared-elapsed-origin-audit.json",
+    "observed_coverage_issue": "in all four O1/O2 repeats, the source-flow record ends before the sensor record and the final recorded source rate is non-zero; the complete release history and full-event source/sensor operator are therefore unavailable from these CSV histories alone",
+    "calibration_accuracy": "2025 article reports ±1% accuracy; manufacturer XEN-5320 datasheet gives preliminary 1% full-scale inaccuracy; event-specific calibration certificate not present in local dataset package",
+    "sensor_count": 29
+  },
+  "promotion": {
+    "degali_score_available": false,
+    "obstacle_h2_validation_allowed": false,
+    "gate_codes": ["obstacle_assembly_dimensions_unresolved", "obstacle_position_anchor_unresolved", "ffi_expanded_open_end_boundary_unvalidated", "source_sensor_clock_alignment_unverified", "source_flow_history_ends_before_sensor_record", "sensor_calibration_certificate_missing"]
+  }
+}

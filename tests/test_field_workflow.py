@@ -430,7 +430,9 @@ def test_field_workflow_projects_multiple_facility_obstacles_into_one_conservati
         require_in_plane_sensor=False,
         allow_conditional=True,
     )
+    assert decision.status == "withheld"
     assert "obstacle_transport_conditional" in decision.gate_codes
+    assert "quantitative_obstacle_prediction_prohibited" in decision.gate_codes
 
     with pytest.raises(ValueError, match="either obstacle or obstacles"):
         FieldSemiFVRequest(

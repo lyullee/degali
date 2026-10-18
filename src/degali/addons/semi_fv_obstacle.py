@@ -11,6 +11,7 @@ until an obstacle-specific LH2 validation set is available.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from bisect import bisect_left, bisect_right
 import math
 from typing import Sequence
 
@@ -148,18 +149,26 @@ class SourceRateSchedule:
             raise ValueError("source-schedule interval lies outside declared duration")
         start = max(start, 0.0)
         end = min(end, self.duration_s)
+        if end <= start:
+            return 0.0
+        first_segment = max(0, bisect_right(self.time_s, start) - 1)
+        stop_segment = min(
+            len(self.time_s) - 1, bisect_left(self.time_s, end),
+        )
         if self.rate_operator == "piecewise_constant":
             return math.fsum(
-                rate * max(0.0, min(end, right) - max(start, left))
-                for left, right, rate in zip(self.time_s, self.time_s[1:], self.rate_kg_s)
+                self.rate_kg_s[index]
+                * max(
+                    0.0,
+                    min(end, self.time_s[index + 1])
+                    - max(start, self.time_s[index]),
+                )
+                for index in range(first_segment, stop_segment)
             )
         masses = []
-        for left, right, left_rate, right_rate in zip(
-            self.time_s,
-            self.time_s[1:],
-            self.rate_kg_s,
-            self.rate_kg_s[1:],
-        ):
+        for index in range(first_segment, stop_segment):
+            left, right = self.time_s[index:index + 2]
+            left_rate, right_rate = self.rate_kg_s[index:index + 2]
             clipped_start = max(start, left)
             clipped_end = min(end, right)
             if clipped_end <= clipped_start:
@@ -322,6 +331,12 @@ class SemiFVDiagnostics:
     source_mass_ledger_residual_kg: float = 0.0
     source_mass_schedule_residual_kg: tuple[tuple[str, float], ...] = ()
     maximum_source_mass_schedule_residual_kg: float = 0.0
+    # The legacy routing operator may still be used for regression and mass-
+    # ledger diagnostics.  Once a solid is present its concentration field is
+    # not a quantitative obstacle prediction: blocked flux is moved by a
+    # non-local target-cell search rather than a pressure-coupled velocity
+    # solution.
+    quantitative_prediction_allowed: bool = True
 
     def __post_init__(self) -> None:
         non_negative = {
@@ -371,6 +386,10 @@ class SemiFVDiagnostics:
             raise ValueError("semi-FV diagnostic diverted_mass_fraction must lie in [0, 1]")
         if self.applicability not in {"accepted", "conditional", "blocked"}:
             raise ValueError("semi-FV diagnostic applicability is unsupported")
+        if not isinstance(self.quantitative_prediction_allowed, bool):
+            raise TypeError(
+                "semi-FV diagnostic quantitative_prediction_allowed must be boolean"
+            )
         if not isinstance(self.warnings, tuple) or any(
             not isinstance(item, str) or not item.strip() for item in self.warnings
         ):
@@ -744,9 +763,12 @@ def solve_semi_fv_obstacle(
         default=0.0,
     )
     warnings = (
-        "reduced-order obstacle routing; not obstacle-resolved CFD",
+        (
+            "legacy non-local obstacle routing; quantitative obstacle "
+            "concentration prediction is prohibited"
+        ),
         "no LH2 obstacle concentration validation is included",
-    )
+    ) if obstacle_contact else ()
     applicability = "conditional" if obstacle_contact else "accepted"
     mass_domain = float(np.sum(concentration) * cell_volume)
     final_mass_residual = float(total_in - mass_domain - total_out)
@@ -768,6 +790,7 @@ def solve_semi_fv_obstacle(
         diverted_mass_fraction=float(np.clip(fraction, 0.0, 1.0)),
         applicability=applicability,
         warnings=warnings,
+        quantitative_prediction_allowed=not obstacle_contact,
         source_mass_injected_kg=tuple(
             (label, float(mass)) for label, mass in source_mass_injected.items()
         ),

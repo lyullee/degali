@@ -1,5 +1,5 @@
 - A no-fit fast model is tested on separate liquid-hydrogen release campaigns.
 - Peak and synchronized-mean operators change the validation conclusion.
-- Source, wind and sensor provenance are explicit and hash-pinned.
+- A bounded GH2 enclosure model gives 0.282 vol%p holdout MAE.
 - A low-wind external-release residual defines the application boundary.
 - The framework supports screening, not safety-distance certification.

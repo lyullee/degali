@@ -47,6 +47,10 @@ were transcribed as candidate metadata.
 
 ## Confirmation gate
 
+**Status on 10 October 2026:** confirmed for the DEGALI manuscript. The
+approved values and declaration boundary are recorded in
+[`docs/ijhe-author-approval-2026-10-10.md`](ijhe-author-approval-2026-10-10.md).
+
 The corresponding author must confirm, for this exact DEGALI manuscript:
 
 1. the complete author list, order, affiliations, ORCIDs and corresponding
@@ -57,8 +61,8 @@ The corresponding author must confirm, for this exact DEGALI manuscript:
 5. that all co-authors approve the manuscript and the exclusive-submission
    declaration.
 
-Until that confirmation is recorded, the manuscript, cover letter and DOCX/PDF
-remain author-neutral and the automated audit must continue to report the
-author/declaration warning. This gate deliberately prevents a metadata record
-from an unrelated PSEP submission being silently treated as authority for the
-IJHE paper.
+Before the confirmation was recorded, the manuscript, cover letter and
+DOCX/PDF remained author-neutral. The gate prevented metadata from the related
+PSEP submission from being silently treated as authority for the IJHE paper;
+the new approval record now supplies that authority without changing the
+separate experimental-evidence status.

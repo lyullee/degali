@@ -197,6 +197,24 @@ _CONCENTRATION_FIELD_NAMES = (
     "observed_mean_c_pct",
     "mean_vol_pct",
 )
+# USN/FFI exports use one wide CSV with columns such as
+# ``sensor 1 h2 concentration [%]`` and ``h2 sensor time`` rather than a
+# long-form ``sensor_id, concentration`` table.  These aliases are used for
+# inventory/near-miss diagnostics only; they do not relax the requirement for
+# a registered sensor geometry before promoting receptor observations.
+_FFI_SENSOR_CONCENTRATION_RE = re.compile(
+    r"^sensor_\d+_h2_concentration(?:_pct)?$"
+)
+_FFI_SOURCE_RATE_RE = re.compile(r"^mass_flow_meter_\d+_g_s$")
+_FFI_SOURCE_RATE_FIELD_NAMES = (
+    "mass_flow_meter_1_g_s",
+    "mass_flow_g_s",
+    "total_mean_mass_flow_g_s",
+)
+_FFI_TIME_FIELD_NAMES = (
+    "flow_time_s",
+    "h2_sensor_time",
+)
 _CLOCK_ID_FIELD_NAMES = (
     "common_clock_id", "clock_id", "synchronized_clock_id",
     "synchronization_id", "sync_id", "time_sync_id", "clock_sync_id",
@@ -516,7 +534,8 @@ def _channels_for_keys(
         "mass_flow", "mass_flow_kg_s", "release_rate", "release_rate_kg_s",
         "leak_rate", "source_rate", "source_rate_kg_s", "mass_rate_kg_s",
         "mass_rate_reported_kg_s", "rate_kg_s", "inflow_kg_s", "erate",
-    )
+        *_FFI_SOURCE_RATE_FIELD_NAMES,
+    ) or any(_FFI_SOURCE_RATE_RE.fullmatch(key) for key in keys)
     source_id = has(
         "source_boundary_id", "source_id", "release_id",
         "source_boundary", "source_bound",
@@ -535,7 +554,9 @@ def _channels_for_keys(
         and has("geometry", "height", "width", "length", "polygon", "vertices", "position")
     )
     sensor = has("sensor", "sensor_id", "receptor", "receptor_id")
-    concentration = has(*_CONCENTRATION_FIELD_NAMES)
+    concentration = has(*_CONCENTRATION_FIELD_NAMES) or any(
+        _FFI_SENSOR_CONCENTRATION_RE.fullmatch(key) for key in keys
+    )
     coordinates = (
         has("x_downwind_m", "x_m", "x")
         and has("y_crosswind_m", "y_m", "y")
@@ -559,6 +580,8 @@ def _channels_for_keys(
                 "mass_flow", "mass_flow_kg_s", "release_rate", "release_rate_kg_s",
                 "leak_rate", "source_rate", "source_rate_kg_s", "mass_rate_kg_s",
                 "mass_rate_reported_kg_s", "rate_kg_s", "inflow_kg_s", "erate",
+                *_FFI_SOURCE_RATE_FIELD_NAMES,
+                *tuple(key for key in keys if _FFI_SOURCE_RATE_RE.fullmatch(key)),
                 minimum=0.0,
             )
         ))
@@ -571,6 +594,8 @@ def _channels_for_keys(
                 "mass_flow", "mass_flow_kg_s", "release_rate", "release_rate_kg_s",
                 "leak_rate", "source_rate", "source_rate_kg_s", "mass_rate_kg_s",
                 "mass_rate_reported_kg_s", "rate_kg_s", "inflow_kg_s", "erate",
+                *_FFI_SOURCE_RATE_FIELD_NAMES,
+                *tuple(key for key in keys if _FFI_SOURCE_RATE_RE.fullmatch(key)),
                 minimum=0.0,
             )
         )
@@ -1002,6 +1027,7 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
     field_values: dict[str, list[object]] = {}
     records: tuple[dict[str, object], ...] = ()
     sha256: str | None = None
+    ffi_wide_layout = False
     try:
         sha256 = _sha256_file(path)
         if suffix == ".csv":
@@ -1013,6 +1039,16 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
                     rows: list[tuple[str, ...]] = []
                     row_count = 0
                 else:
+                    # FFI/USN wide exports reserve the first column for an
+                    # unlabeled row index.  It is structural metadata, not a
+                    # missing measurement field; preserve row alignment while
+                    # allowing the remaining labelled channels to be audited.
+                    if (
+                        raw_headers[0].strip() == ""
+                        and any(str(value).strip() for value in raw_headers[1:])
+                    ):
+                        raw_headers = ("__ffi_row_index__", *raw_headers[1:])
+                        ffi_wide_layout = True
                     headers = tuple(_normalise_key(value) for value in raw_headers)
                     if any(not header for header in headers):
                         raise ValueError("CSV header contains an empty field")
@@ -1060,6 +1096,12 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
                 records = tuple(csv_records)
             if not fields:
                 notes.append("CSV has no header fields")
+            if ffi_wide_layout:
+                notes.append(
+                    "FFI wide-table layout detected: the unlabeled first column was "
+                    "treated as a row index; source and sensor histories remain "
+                    "unregistered until event geometry and clock evidence are joined"
+                )
         elif suffix == ".json":
             payload = json.loads(
                 path.read_text(encoding="utf-8-sig"),
@@ -1132,6 +1174,15 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
             "fixed-receptor geometry or threshold metadata found without a quantitative "
             "concentration column; not a validation observation"
         )
+    ffi_sensor_history = any(
+        _FFI_SENSOR_CONCENTRATION_RE.fullmatch(key) for key in fields
+    )
+    if ffi_sensor_history and "receptor_observations" not in channels:
+        notes.append(
+            "FFI H2 sensor concentration history detected without co-located "
+            "sensor coordinates/height in the same structured record; join the "
+            "registered sensor geometry before quantitative receptor promotion"
+        )
     if has(
         "first_above_4pct_s", "final_below_4pct_s", "threshold_crossing_s",
         "published_first_to_last_span_s",
@@ -1154,13 +1205,26 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
     if not has(
         "source_boundary_id", "source_id", "release_id",
         "source_boundary", "source_bound",
-    ) and has(
+    ) and (
+        has(
         "mass_flow", "mass_flow_kg_s", "release_rate", "release_rate_kg_s",
         "leak_rate", "source_rate", "source_rate_kg_s", "mass_rate_kg_s",
         "mass_rate_reported_kg_s", "rate_kg_s", "inflow_kg_s", "erate",
+        *_FFI_SOURCE_RATE_FIELD_NAMES,
+        ) or any(_FFI_SOURCE_RATE_RE.fullmatch(key) for key in fields)
     ):
         notes.append(
             "release-rate field found without an explicit source-boundary identifier"
+        )
+    if (
+        any(name in fields for name in _FFI_SOURCE_RATE_FIELD_NAMES)
+        or any(_FFI_SOURCE_RATE_RE.fullmatch(key) for key in fields)
+    ) and (
+        "source_boundary" not in channels
+    ):
+        notes.append(
+            "FFI mass-flow history detected without an explicit source-boundary "
+            "identifier; retain the event crosswalk/source-rate provenance"
         )
     if (
         has(
@@ -1176,7 +1240,10 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
             "atmospheric source-rate boundary; not a dispersion source"
         )
     elif (
-        has("timestamp", "time_s", "observation_time_s", "datetime", "utc_time")
+        (
+            has("timestamp", "time_s", "observation_time_s", "datetime", "utc_time")
+            or any(name in fields for name in _FFI_TIME_FIELD_NAMES)
+        )
         and any(_PROCESS_TAG_RE.fullmatch(key) for key in fields)
         and "source_boundary" not in channels
     ):
@@ -1185,10 +1252,13 @@ def _candidate_from_file(path: Path) -> FieldEvidenceCandidate | None:
             "source-rate boundary; not a dispersion source"
         )
     if (
-        has("timestamp", "time_s", "observation_time_s", "datetime", "utc_time")
+        (
+            has("timestamp", "time_s", "observation_time_s", "datetime", "utc_time")
+            or any(name in fields for name in _FFI_TIME_FIELD_NAMES)
+        )
         and not has(*_CLOCK_ID_FIELD_NAMES)
         and not has(*_SYNCHRONIZATION_METADATA_FIELD_NAMES)
-        and sensor_geometry
+        and (sensor_geometry or ffi_sensor_history)
     ):
         notes.append(
             "sensor time axis found without a common-clock or synchronization identifier"

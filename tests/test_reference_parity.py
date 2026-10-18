@@ -2454,6 +2454,15 @@ def test_statistics_sign_convention():
     assert perfect.fac2 == 1.0
     assert perfect.acceptable
 
+    # Hanna VG is the exponentiated uncentred mean-square log error.  Its
+    # logarithm therefore decomposes into population variance plus log(MG)^2.
+    predicted = np.array([0.7, 2.4, 3.1])
+    scattered = statistics(obs, predicted)
+    log_error = np.log(obs) - np.log(predicted)
+    assert math.log(scattered.vg) == pytest.approx(
+        np.var(log_error) + math.log(scattered.mg) ** 2
+    )
+
 
 def test_statistics_needs_positive_pairs():
     from degali.validation.statistics import statistics

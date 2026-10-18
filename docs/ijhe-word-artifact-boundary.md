@@ -29,7 +29,7 @@ source set:
 - `MANUSCRIPT_LH2_VALIDATION.md`
 - `IJHE_SUPPLEMENTARY_INFORMATION.md`
 - `IJHE_HIGHLIGHTS.md`
-- `outputs/ijhe-highlights-2026-10-09.docx` (standalone portal upload)
+- `outputs/ijhe-highlights-2026-10-10.docx` (standalone portal upload)
 - `IJHE_COVER_LETTER_DRAFT.md`
 - `IJHE_GRAPHICAL_ABSTRACT.svg`
 - `docs/ijhe-figure-table-register.md`
@@ -41,9 +41,9 @@ into the DEGALI manuscript without author confirmation.
 
 An author-neutral draft can now be generated reproducibly with
 `tools/build_ijhe_docx.py`. The local draft
-`outputs/ijhe-manuscript-draft-2026-10-09.docx` was exported through the
-installed Microsoft Word renderer to a 12-page PDF and visually inspected
-page by page. It embeds the six main figures next to their captions for the
+`outputs/ijhe-manuscript-draft-2026-10-10.docx` was exported through the
+installed Microsoft Word renderer to a 15-page PDF and visually inspected
+page by page. It embeds the seven main figures next to their captions for the
 single-file review copy; canonical SVG/PDF figure artifacts remain separate
 upload files. It deliberately retains author placeholders and is a
 layout-verified draft, not the final submission file.

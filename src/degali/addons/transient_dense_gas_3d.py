@@ -23,7 +23,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Mapping, Sequence
+import time
+from typing import Callable, Mapping, Sequence
 
 import numpy as np
 
@@ -103,6 +104,9 @@ class TransientDenseGas3DConfig:
     wind_relaxation_time_s: float = 0.0
     momentum_diffusivity_m2_s: float | None = None
     store_velocity_fields: bool = False
+    boundary_modes: tuple[str, str, str] = ("open", "open", "open")
+    solid_mask_zyx: np.ndarray | None = None
+    impermeable_ground: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "domain_m", _positive_tuple(self.domain_m, "domain_m", 3))
@@ -163,6 +167,23 @@ class TransientDenseGas3DConfig:
                 raise ValueError("momentum_diffusivity_m2_s must be non-negative")
         if not isinstance(self.store_velocity_fields, bool):
             raise TypeError("store_velocity_fields must be boolean")
+        if len(self.boundary_modes) != 3 or any(
+            mode not in {"open", "closed"} for mode in self.boundary_modes
+        ):
+            raise ValueError(
+                "boundary_modes must contain open/closed values for x, y and z"
+            )
+        object.__setattr__(self, "boundary_modes", tuple(self.boundary_modes))
+        if not isinstance(self.impermeable_ground, bool):
+            raise TypeError("impermeable_ground must be boolean")
+        if self.solid_mask_zyx is not None:
+            mask = np.asarray(self.solid_mask_zyx, dtype=bool)
+            expected = (self.cells[2], self.cells[1], self.cells[0])
+            if mask.shape != expected:
+                raise ValueError(
+                    f"solid_mask_zyx must have shape {expected}, got {mask.shape}"
+                )
+            object.__setattr__(self, "solid_mask_zyx", mask.copy())
 
 
 @dataclass(frozen=True)
@@ -308,8 +329,16 @@ def _advect_uniform_axis(
     dt: float,
     spacing: float,
     axis: int,
+    *,
+    closed_boundary: bool = False,
+    blocked_faces: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float]:
-    """Conservative first-order upwind advection with vacuum boundaries."""
+    """Conservative first-order upwind advection.
+
+    Open axes use vacuum boundaries, while closed axes impose zero scalar
+    flux at both walls.  The latter is needed for enclosure sidewalls and
+    floor/ceiling surfaces without changing the legacy free-field default.
+    """
     if abs(velocity) <= 0.0:
         return field, 0.0
     shape = list(field.shape)
@@ -321,20 +350,26 @@ def _advect_uniform_axis(
         source_slice[axis] = slice(None, -1)
         face_slice[axis] = slice(1, -1)
         flux[tuple(face_slice)] = velocity * field[tuple(source_slice)]
-        outlet = [slice(None)] * field.ndim
-        outlet[axis] = -1
-        interior = [slice(None)] * field.ndim
-        interior[axis] = -1
-        flux[tuple(outlet)] = velocity * field[tuple(interior)]
+        if not closed_boundary:
+            outlet = [slice(None)] * field.ndim
+            outlet[axis] = -1
+            interior = [slice(None)] * field.ndim
+            interior[axis] = -1
+            flux[tuple(outlet)] = velocity * field[tuple(interior)]
     else:
         source_slice[axis] = slice(1, None)
         face_slice[axis] = slice(1, -1)
         flux[tuple(face_slice)] = velocity * field[tuple(source_slice)]
-        inlet = [slice(None)] * field.ndim
-        inlet[axis] = 0
-        interior = [slice(None)] * field.ndim
-        interior[axis] = 0
-        flux[tuple(inlet)] = velocity * field[tuple(interior)]
+        if not closed_boundary:
+            inlet = [slice(None)] * field.ndim
+            inlet[axis] = 0
+            interior = [slice(None)] * field.ndim
+            interior[axis] = 0
+            flux[tuple(inlet)] = velocity * field[tuple(interior)]
+    if blocked_faces is not None:
+        if blocked_faces.shape != flux.shape:
+            raise ValueError("blocked_faces shape must match the axis face grid")
+        flux[blocked_faces] = 0.0
     increment = -(dt / spacing) * np.diff(flux, axis=axis)
     outgoing = float(np.sum(np.maximum(flux.take(indices=-1, axis=axis), 0.0)))
     if velocity < 0.0:
@@ -351,6 +386,9 @@ def _advect_variable_axis(
     dt: float,
     spacing: float,
     axis: int,
+    *,
+    closed_boundary: bool = False,
+    blocked_faces: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float]:
     """Conservative upwind advection for a cell-centred velocity field."""
     if velocity.shape != field.shape:
@@ -378,10 +416,15 @@ def _advect_variable_axis(
     right_cell = [slice(None)] * field.ndim
     left_cell[axis] = 0
     right_cell[axis] = -1
-    # Vacuum boundaries: only outward flow carries scalar out; inward flow
-    # sees zero concentration outside the domain.
-    flux[tuple(left_face)] = np.minimum(velocity[tuple(left_cell)], 0.0) * field[tuple(left_cell)]
-    flux[tuple(right_face)] = np.maximum(velocity[tuple(right_cell)], 0.0) * field[tuple(right_cell)]
+    # Open boundaries let outward flow carry scalar out; inward flow sees
+    # zero concentration outside. Closed boundaries retain zero face flux.
+    if not closed_boundary:
+        flux[tuple(left_face)] = np.minimum(velocity[tuple(left_cell)], 0.0) * field[tuple(left_cell)]
+        flux[tuple(right_face)] = np.maximum(velocity[tuple(right_cell)], 0.0) * field[tuple(right_cell)]
+    if blocked_faces is not None:
+        if blocked_faces.shape != flux.shape:
+            raise ValueError("blocked_faces shape must match the axis face grid")
+        flux[blocked_faces] = 0.0
     result = field - (dt / spacing) * np.diff(flux, axis=axis)
     outflow = (
         np.sum(np.maximum(flux[tuple(right_face)], 0.0))
@@ -395,14 +438,22 @@ def _advect_vertical(
     vertical_velocity: np.ndarray,
     dt: float,
     spacing: float,
+    *,
+    closed_boundary: bool = False,
+    blocked_faces: np.ndarray | None = None,
 ) -> tuple[np.ndarray, float]:
     """Conservative upwind advection for a spatially varying vertical speed."""
     nz, ny, nx = field.shape
     flux = np.zeros((nz + 1, ny, nx), dtype=float)
     w_face = 0.5 * (vertical_velocity[:-1] + vertical_velocity[1:])
     flux[1:-1] = np.where(w_face >= 0.0, w_face * field[:-1], w_face * field[1:])
-    flux[0] = np.minimum(vertical_velocity[0], 0.0) * field[0]
-    flux[-1] = np.maximum(vertical_velocity[-1], 0.0) * field[-1]
+    if not closed_boundary:
+        flux[0] = np.minimum(vertical_velocity[0], 0.0) * field[0]
+        flux[-1] = np.maximum(vertical_velocity[-1], 0.0) * field[-1]
+    if blocked_faces is not None:
+        if blocked_faces.shape != flux.shape:
+            raise ValueError("blocked_faces shape must match the vertical face grid")
+        flux[blocked_faces] = 0.0
     result = field - (dt / spacing) * np.diff(flux, axis=0)
     outflow = float(
         np.sum(np.maximum(flux[-1], 0.0))
@@ -411,7 +462,13 @@ def _advect_vertical(
     return result, outflow
 
 
-def _diffuse_neumann(field: np.ndarray, diffusivity: float, dt: float, spacings: tuple[float, float, float]) -> np.ndarray:
+def _diffuse_neumann(
+    field: np.ndarray,
+    diffusivity: float,
+    dt: float,
+    spacings: tuple[float, float, float],
+    solid_mask: np.ndarray | None = None,
+) -> np.ndarray:
     if diffusivity <= 0.0:
         return field
     dx, dy, dz = spacings
@@ -420,10 +477,24 @@ def _diffuse_neumann(field: np.ndarray, diffusivity: float, dt: float, spacings:
         plus = np.take(field, indices=range(1, field.shape[axis]), axis=axis)
         minus = np.take(field, indices=range(field.shape[axis] - 1), axis=axis)
         centre = field
-        plus_full = np.concatenate((np.take(field, [0], axis=axis), plus), axis=axis)
-        minus_full = np.concatenate((minus, np.take(field, [-1], axis=axis)), axis=axis)
+        plus_full = np.concatenate((plus, np.take(field, [-1], axis=axis)), axis=axis)
+        minus_full = np.concatenate((np.take(field, [0], axis=axis), minus), axis=axis)
+        if solid_mask is not None:
+            plus_mask = np.concatenate(
+                (np.take(solid_mask, range(1, solid_mask.shape[axis]), axis=axis),
+                 np.take(solid_mask, [-1], axis=axis)), axis=axis,
+            )
+            minus_mask = np.concatenate(
+                (np.take(solid_mask, [0], axis=axis),
+                 np.take(solid_mask, range(solid_mask.shape[axis] - 1), axis=axis)), axis=axis,
+            )
+            plus_full = np.where(solid_mask | plus_mask, centre, plus_full)
+            minus_full = np.where(solid_mask | minus_mask, centre, minus_full)
         lap += (plus_full - 2.0 * centre + minus_full) / spacing**2
-    return field + diffusivity * dt * lap
+    result = field + diffusivity * dt * lap
+    if solid_mask is not None:
+        result = np.where(solid_mask, 0.0, result)
+    return result
 
 
 def _sample_trilinear(
@@ -436,8 +507,10 @@ def _sample_trilinear(
     indices = []
     fractions = []
     for coordinates, value in zip((x, y, z), position):
-        if value < coordinates[0] or value > coordinates[-1]:
-            return 0.0
+        # Receptors may be mounted on a physical wall, beyond the first or
+        # last cell centre while still inside the declared domain. Sample the
+        # nearest resolved centre instead of inventing a zero reading.
+        value = float(np.clip(value, coordinates[0], coordinates[-1]))
         right = int(np.clip(np.searchsorted(coordinates, value), 1, len(coordinates) - 1))
         left = right - 1
         span = coordinates[right] - coordinates[left]
@@ -458,19 +531,70 @@ def _sample_trilinear(
     return float(value)
 
 
+def _receptor_stencils(x, y, z, receptors):
+    """Freeze spatial interpolation once; coordinates do not change in time."""
+    positions = np.array([r.position_m for r in receptors], dtype=float).reshape(-1, 3)
+    indices, fractions = [], []
+    for axis, coordinates in enumerate((x, y, z)):
+        values = np.clip(positions[:, axis], coordinates[0], coordinates[-1])
+        right = np.clip(np.searchsorted(coordinates, values), 1, len(coordinates)-1)
+        left = right-1
+        indices.append((left, right))
+        fractions.append((values-coordinates[left])/(coordinates[right]-coordinates[left]))
+    zs, ys, xs, weights = [], [], [], []
+    for iz in (0, 1):
+        for iy in (0, 1):
+            for ix in (0, 1):
+                zs.append(indices[2][iz]); ys.append(indices[1][iy]); xs.append(indices[0][ix])
+                weights.append((fractions[2] if iz else 1-fractions[2])
+                    * (fractions[1] if iy else 1-fractions[1])
+                    * (fractions[0] if ix else 1-fractions[0]))
+    return np.array(zs), np.array(ys), np.array(xs), np.array(weights)
+
+
 def solve_transient_dense_gas_3d(
     config: TransientDenseGas3DConfig,
     *,
     receptors: Sequence[DenseGas3DReceptor] = (),
+    initial_species_kg_m3: np.ndarray | None = None,
+    field_snapshot_interval_s: float | None = None,
+    field_snapshot_callback: Callable[[float, np.ndarray], None] | None = None,
 ) -> TransientDenseGas3DResult:
-    """Run a source-history/wind-history coupled 3-D transient calculation."""
+    """Run a source-history/wind-history coupled 3-D transient calculation.
+
+    ``field_snapshot_callback`` is an optional output-only hook for sparse
+    visualisation/checkpoint capture.  It receives a defensive copy of the
+    species field and cannot alter the solver state.  The hook does not enable
+    ``store_fields`` or change the solver time step.
+    """
+    started = time.perf_counter()
     if not isinstance(config, TransientDenseGas3DConfig):
         raise TypeError("config must be a TransientDenseGas3DConfig")
     if any(not isinstance(item, DenseGas3DReceptor) for item in receptors):
         raise TypeError("receptors must contain DenseGas3DReceptor values")
+    if (field_snapshot_callback is None) != (field_snapshot_interval_s is None):
+        raise ValueError(
+            "field_snapshot_interval_s and field_snapshot_callback must be supplied together"
+        )
+    if field_snapshot_callback is not None and not callable(field_snapshot_callback):
+        raise TypeError("field_snapshot_callback must be callable")
+    if field_snapshot_interval_s is not None:
+        field_snapshot_interval_s = _finite(
+            field_snapshot_interval_s, "field_snapshot_interval_s"
+        )
+        if field_snapshot_interval_s <= 0.0:
+            raise ValueError("field_snapshot_interval_s must be positive")
     labels = [item.label for item in receptors]
     if len(set(labels)) != len(labels):
         raise ValueError("receptor labels must be unique")
+    for receptor in receptors:
+        if any(
+            coordinate > bound
+            for coordinate, bound in zip(receptor.position_m, config.domain_m)
+        ):
+            raise ValueError(
+                f"receptor {receptor.label!r} must lie inside the domain"
+            )
     wind_times, _speeds, _directions = config.wind_history.arrays()
     if wind_times[0] > 0.0 or wind_times[-1] < config.duration_s:
         raise ValueError("wind history must cover the complete solver duration")
@@ -481,8 +605,41 @@ def solve_transient_dense_gas_3d(
     x = (np.arange(nx) + 0.5) * dx
     y = (np.arange(ny) + 0.5) * dy
     z = (np.arange(nz) + 0.5) * dz
+    receptor_z, receptor_y, receptor_x, receptor_weights = _receptor_stencils(x, y, z, receptors)
+    def sample_receptors(field):
+        return np.sum(field[receptor_z, receptor_y, receptor_x]*receptor_weights, axis=0)
     cell_volume = dx * dy * dz
     weights = _source_weights(x, y, z, config.source_position_m, config.source_sigma_m)
+    solid = (
+        np.zeros((nz, ny, nx), dtype=bool)
+        if config.solid_mask_zyx is None
+        else np.asarray(config.solid_mask_zyx, dtype=bool).copy()
+    )
+    weights[solid] = 0.0
+    weight_total = float(np.sum(weights))
+    if weight_total <= 0.0:
+        raise ValueError("solid obstacle removes the complete source support")
+    weights /= weight_total
+    # A face is blocked when either adjacent cell is solid.  Boundary faces
+    # remain open/closed according to boundary_modes; only internal solid
+    # interfaces are changed here.
+    blocked_x = np.pad(
+        solid[:, :, :-1] | solid[:, :, 1:],
+        ((0, 0), (0, 0), (1, 1)),
+        constant_values=False,
+    )
+    blocked_y = np.pad(
+        solid[:, :-1, :] | solid[:, 1:, :],
+        ((0, 0), (1, 1), (0, 0)),
+        constant_values=False,
+    )
+    blocked_z = np.pad(
+        solid[:-1, :, :] | solid[1:, :, :],
+        ((1, 1), (0, 0), (0, 0)),
+        constant_values=False,
+    )
+    if config.impermeable_ground:
+        blocked_z[0] = True
     steps = int(math.ceil(config.duration_s / config.time_step_s))
     dt = config.duration_s / steps
     max_wind = float(np.max(_speeds))
@@ -505,9 +662,15 @@ def solve_transient_dense_gas_3d(
         raise ValueError(f"3-D diffusion stability number exceeds one: {diffusion_number:.6g}")
 
     field = np.zeros((nz, ny, nx), dtype=float)
+    if initial_species_kg_m3 is not None:
+        field = np.asarray(initial_species_kg_m3, dtype=float).copy()
+        if (field.shape != solid.shape or np.any(~np.isfinite(field))
+                or np.any(field < 0.0) or np.any(field[solid] != 0.0)):
+            raise ValueError("initial species must be finite nonnegative fluid-cell concentrations")
+    initial_mass = float(np.sum(field) * cell_volume)
     volume = cell_volume
     times = [0.0]
-    total_mass = [0.0]
+    total_mass = [initial_mass]
     outflow_mass = [0.0]
     injected_mass = [0.0]
     residuals = [0.0]
@@ -524,10 +687,18 @@ def solve_transient_dense_gas_3d(
         [np.stack((velocity_u.copy(), velocity_v.copy(), velocity_w.copy()))]
         if config.store_velocity_fields else None
     )
-    receptor_traces = {item.label: [0.0] for item in receptors}
+    receptor_traces = {item.label: [float(value)]
+                       for item, value in zip(receptors, sample_receptors(field))}
     stored_fields = [field.copy()] if config.store_fields else None
+    snapshot_count = 0
+    next_snapshot_time = None
+    if field_snapshot_callback is not None:
+        field_snapshot_callback(0.0, field.copy())
+        snapshot_count = 1
+        next_snapshot_time = float(field_snapshot_interval_s)
     cumulative_outflow = 0.0
     cumulative_injected = 0.0
+    outflow_by_axis = np.zeros(3)
 
     for index in range(steps):
         start = index * dt
@@ -536,6 +707,7 @@ def solve_transient_dense_gas_3d(
         source_mass = config.source_schedule.mass_between(start, end)
         if source_mass > 0.0:
             field += source_mass * weights / volume
+            field[solid] = 0.0
         cumulative_injected += source_mass
 
         source_fraction = np.clip(
@@ -571,12 +743,24 @@ def solve_transient_dense_gas_3d(
                 else config.momentum_diffusivity_m2_s
             )
             if momentum_diffusivity > 0.0:
-                velocity_u = _diffuse_neumann(velocity_u, momentum_diffusivity, dt, (dx, dy, dz))
-                velocity_v = _diffuse_neumann(velocity_v, momentum_diffusivity, dt, (dx, dy, dz))
-                velocity_w = _diffuse_neumann(velocity_w, momentum_diffusivity, dt, (dx, dy, dz))
-            field, out_x = _advect_variable_axis(field, velocity_u, dt, dx, axis=2)
-            field, out_y = _advect_variable_axis(field, velocity_v, dt, dy, axis=1)
-            field, out_z = _advect_variable_axis(field, velocity_w, dt, dz, axis=0)
+                velocity_u = _diffuse_neumann(velocity_u, momentum_diffusivity, dt, (dx, dy, dz), solid)
+                velocity_v = _diffuse_neumann(velocity_v, momentum_diffusivity, dt, (dx, dy, dz), solid)
+                velocity_w = _diffuse_neumann(velocity_w, momentum_diffusivity, dt, (dx, dy, dz), solid)
+            field, out_x = _advect_variable_axis(
+                field, velocity_u, dt, dx, axis=2,
+                closed_boundary=config.boundary_modes[0] == "closed",
+                blocked_faces=blocked_x,
+            )
+            field, out_y = _advect_variable_axis(
+                field, velocity_v, dt, dy, axis=1,
+                closed_boundary=config.boundary_modes[1] == "closed",
+                blocked_faces=blocked_y,
+            )
+            field, out_z = _advect_variable_axis(
+                field, velocity_w, dt, dz, axis=0,
+                closed_boundary=config.boundary_modes[2] == "closed",
+                blocked_faces=blocked_z,
+            )
         else:
             velocity_u.fill(float(wind[0]))
             velocity_v.fill(float(wind[1]))
@@ -590,19 +774,33 @@ def solve_transient_dense_gas_3d(
                 -config.maximum_buoyant_speed_m_s,
                 config.maximum_buoyant_speed_m_s,
             )
-            field, out_x = _advect_uniform_axis(field, float(wind[0]), dt, dx, axis=2)
-            field, out_y = _advect_uniform_axis(field, float(wind[1]), dt, dy, axis=1)
-            field, out_z = _advect_vertical(field, velocity_w, dt, dz)
-        field = _diffuse_neumann(field, config.diffusivity_m2_s, dt, (dx, dy, dz))
+            field, out_x = _advect_uniform_axis(
+                field, float(wind[0]), dt, dx, axis=2,
+                closed_boundary=config.boundary_modes[0] == "closed",
+                blocked_faces=blocked_x,
+            )
+            field, out_y = _advect_uniform_axis(
+                field, float(wind[1]), dt, dy, axis=1,
+                closed_boundary=config.boundary_modes[1] == "closed",
+                blocked_faces=blocked_y,
+            )
+            field, out_z = _advect_vertical(
+                field, velocity_w, dt, dz,
+                closed_boundary=config.boundary_modes[2] == "closed",
+                blocked_faces=blocked_z,
+            )
+        field = _diffuse_neumann(field, config.diffusivity_m2_s, dt, (dx, dy, dz), solid)
+        field[solid] = 0.0
         minimum = float(np.min(field))
         if minimum < -1.0e-10:
             raise RuntimeError(f"3-D transient transport became negative: {minimum:.6g}")
         field = np.maximum(field, 0.0)
         step_outflow = (out_x * dy * dz) + (out_y * dx * dz) + (out_z * dx * dy)
+        outflow_by_axis += (out_x * dy * dz, out_y * dx * dz, out_z * dx * dy)
         cumulative_outflow += step_outflow
         now = end
         mass = float(np.sum(field) * volume)
-        residual = mass + cumulative_outflow - cumulative_injected
+        residual = mass + cumulative_outflow - cumulative_injected - initial_mass
         times.append(now)
         total_mass.append(mass)
         outflow_mass.append(cumulative_outflow)
@@ -615,16 +813,23 @@ def solve_transient_dense_gas_3d(
             float(np.mean(velocity_v)),
             float(np.mean(velocity_w)),
         )))
-        for receptor in receptors:
-            receptor_traces[receptor.label].append(
-                _sample_trilinear(field, x, y, z, receptor.position_m)
-            )
+        for receptor, value in zip(receptors, sample_receptors(field)):
+            receptor_traces[receptor.label].append(float(value))
         if stored_fields is not None:
             stored_fields.append(field.copy())
         if stored_velocity_fields is not None:
             stored_velocity_fields.append(
                 np.stack((velocity_u.copy(), velocity_v.copy(), velocity_w.copy()))
             )
+        if (
+            field_snapshot_callback is not None
+            and next_snapshot_time is not None
+            and now + 1.0e-12 >= next_snapshot_time
+        ):
+            field_snapshot_callback(float(now), field.copy())
+            snapshot_count += 1
+            while next_snapshot_time <= now + 1.0e-12:
+                next_snapshot_time += float(field_snapshot_interval_s)
 
     return TransientDenseGas3DResult(
         schema=TRANSIENT_DENSE_GAS_3D_SCHEMA,
@@ -644,6 +849,8 @@ def solve_transient_dense_gas_3d(
             "cells": [nx, ny, nz],
             "cell_size_m": [dx, dy, dz],
             "time_step_s": dt,
+            "field_snapshot_interval_s": field_snapshot_interval_s,
+            "field_snapshot_count": snapshot_count,
             "cfl": cfl,
             "diffusion_number": diffusion_number,
             "source_id": config.source_schedule.source_id,
@@ -652,7 +859,18 @@ def solve_transient_dense_gas_3d(
             "maximum_mass_residual_kg": float(np.max(np.abs(residuals))),
             "prognostic_velocity": config.prognostic_velocity,
             "wind_relaxation_time_s": config.wind_relaxation_time_s,
-            "solver_scope": "3-D explicit reduced-order finite-volume buoyant H2 transport with prognostic velocity closure; not LES/RANS",
+            "boundary_modes": list(config.boundary_modes),
+            "impermeable_ground": config.impermeable_ground,
+            "initial_species_mass_kg": initial_mass,
+            "outflow_species_by_axis_kg": outflow_by_axis.tolist(),
+            "solid_cell_count": int(np.count_nonzero(solid)),
+            "runtime_s": float(time.perf_counter() - started),
+            "receptor_sampling": "trilinear with physical-boundary clamping to nearest cell centre",
+            "solver_scope": (
+                "3-D explicit reduced-order finite-volume buoyant H2 transport with "
+                + ("prognostic" if config.prognostic_velocity else "diagnostic")
+                + " velocity closure; not LES/RANS"
+            ),
         },
         mean_velocity_m_s=np.asarray(mean_velocity_history),
         velocity_fields_m_s=(

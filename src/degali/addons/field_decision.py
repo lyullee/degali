@@ -34,6 +34,7 @@ FIELD_OPERATIONAL_GATE_CODES = frozenset({
     "source_ledger_mismatch",
     "source_schedule_mass_mismatch",
     "obstacle_transport_conditional",
+    "quantitative_obstacle_prediction_prohibited",
 })
 
 
@@ -442,6 +443,10 @@ def evaluate_field_operational_screening(
     unpropagated_uncertainty = _unpropagated_field_uncertainty(screening)
     uncertainty_resolved = not unpropagated_uncertainty
     unrepresented_obstacles = _unrepresented_obstacle_labels(screening)
+    quantitative_obstacle_prediction_prohibited = bool(
+        screening.transport is not None
+        and not screening.transport.diagnostics.quantitative_prediction_allowed
+    )
     declared_sensor_labels = _declared_sensor_labels(screening)
     sensor_results_by_label = {item.label: item for item in screening.sensor_results}
     missing_sensor_traces = tuple(
@@ -483,6 +488,16 @@ def evaluate_field_operational_screening(
             "use a validated three-dimensional obstacle/wake model or demonstrate that each omitted obstacle is outside the decision domain"
         )
         gate_codes.append("obstacle_unrepresented")
+    if quantitative_obstacle_prediction_prohibited:
+        reasons.append(
+            "legacy semi-FV obstacle routing is non-local and is prohibited from "
+            "quantitative operational concentration prediction"
+        )
+        actions.append(
+            "replace the legacy obstacle run with a locally conservative validated "
+            "obstacle-resolved transport model before using concentration values"
+        )
+        gate_codes.append("quantitative_obstacle_prediction_prohibited")
     if require_resolved_uncertainty and unpropagated_uncertainty:
         reasons.append(
             "declared field uncertainty was not propagated through this nominal result: "
@@ -514,6 +529,7 @@ def evaluate_field_operational_screening(
         or (require_in_plane_sensor and bool(missing_sensor_traces))
         or (require_in_plane_sensor and not declared_sensor_labels)
         or bool(unrepresented_obstacles)
+        or quantitative_obstacle_prediction_prohibited
         or (require_resolved_uncertainty and not uncertainty_resolved)
     )
     if nonnegotiable:

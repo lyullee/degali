@@ -237,9 +237,9 @@ def _submission_file_checks(checks: list[dict[str, Any]]) -> None:
         _check(
             checks,
             "submission:manuscript-declarations",
-            "pass",
+            "warning",
             "MANUSCRIPT_LH2_VALIDATION.md",
-            "no author-declaration placeholder detected",
+            "declaration text is present; final author approval and journal-form confirmation remain a submission-time check",
         )
 
     highlights = ROOT / "IJHE_HIGHLIGHTS.md"
@@ -525,6 +525,60 @@ def _figure_artifact_check(checks: list[dict[str, Any]]) -> None:
     _check(checks, "submission:figure-artifacts", status, "tools/audit_ijhe_figure_artifacts.py", detail)
 
 
+def _usn_enclosure_validation_check(checks: list[dict[str, Any]]) -> None:
+    """Verify the machine-readable record behind the enclosure claim."""
+
+    relative = "outputs/usn-enclosure-dynamic-validation-2026-10-10/metrics.json"
+    path = ROOT / relative
+    if not path.is_file():
+        _check(checks, "evidence:usn-enclosure-validation", "fail", relative, "validation record is missing")
+        return
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        score = payload["pooled_parameter_holdout_score"]
+        physicality = payload["physicality_gate"]
+        training = payload["training_case"]
+        holdouts = payload["parameter_holdout_cases"]
+        values = (
+            float(score["mae_vol_percent_points"]),
+            float(score["rmse_vol_percent_points"]),
+            float(score["pearson_r"]),
+            float(score["mean_absolute_spatial_mean_4pct_arrival_error_s"]),
+            float(score["mean_absolute_spatial_mean_4pct_duration_error_s"]),
+        )
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+        _check(checks, "evidence:usn-enclosure-validation", "fail", relative, f"invalid validation record: {error}")
+        return
+    valid = (
+        payload.get("schema") == "degali.usn-enclosure-dynamic-validation.v1"
+        and payload.get("claim_level") == "retrospective parameter-holdout validation; not prospective blind validation"
+        and training == "Exp19"
+        and holdouts == ["Exp20", "Exp21", "Exp23"]
+        and math.isclose(values[0], 0.282, abs_tol=0.001)
+        and math.isclose(values[1], 0.332, abs_tol=0.001)
+        and math.isclose(values[2], 0.9795, abs_tol=0.0006)
+        and math.isclose(values[3], 3.7, abs_tol=0.01)
+        and math.isclose(values[4], 27.1, abs_tol=0.01)
+        and physicality.get("status") == "pass"
+        and physicality.get("bounded_0_to_100_vol_percent") is True
+        and float(physicality.get("maximum_mass_residual_kg", math.inf)) < 1.0e-12
+    )
+    _check(
+        checks,
+        "evidence:usn-enclosure-validation",
+        "pass" if valid else "fail",
+        relative,
+        (
+            f"Exp19 fit and Exp20/21/23 holdouts verified; MAE/RMSE/r="
+            f"{values[0]:.3f}/{values[1]:.3f}/{values[2]:.4f}, "
+            f"4pct arrival/duration MAE={values[3]:.1f}/{values[4]:.1f} s, "
+            f"physicality={physicality.get('status')}"
+            if valid else
+            f"record does not match the manuscript claim: training={training}, holdouts={holdouts}, values={values}, physicality={physicality}"
+        ),
+    )
+
+
 def _graphical_abstract_pdf_check(checks: list[dict[str, Any]]) -> None:
     """Verify that the portal-compatible graphical-abstract derivative is not cropped."""
 
@@ -565,8 +619,8 @@ def _graphical_abstract_pdf_check(checks: list[dict[str, Any]]) -> None:
 def _supplementary_artifact_check(checks: list[dict[str, Any]]) -> None:
     """Verify that supplementary information is available in portal-friendly formats."""
 
-    docx_relative = "outputs/ijhe-supplementary-information-2026-10-09.docx"
-    pdf_relative = "outputs/ijhe-supplementary-information-2026-10-09.pdf"
+    docx_relative = "outputs/ijhe-supplementary-information-2026-10-10.docx"
+    pdf_relative = "outputs/ijhe-supplementary-information-2026-10-10.pdf"
     docx_path = ROOT / docx_relative
     pdf_path = ROOT / pdf_relative
     missing = [relative for relative, path in ((docx_relative, docx_path), (pdf_relative, pdf_path)) if not path.is_file()]
@@ -614,7 +668,7 @@ def _supplementary_artifact_check(checks: list[dict[str, Any]]) -> None:
 def _highlights_docx_check(checks: list[dict[str, Any]]) -> None:
     """Verify the standalone Word Highlights file required by Elsevier."""
 
-    relative = "outputs/ijhe-highlights-2026-10-09.docx"
+    relative = "outputs/ijhe-highlights-2026-10-10.docx"
     path = ROOT / relative
     if not path.is_file():
         _check(checks, "submission:highlights-docx", "fail", relative, "Highlights DOCX is missing")
@@ -659,7 +713,7 @@ def _docx_draft_check(checks: list[dict[str, Any]]) -> None:
         detail = "author-neutral DOCX/PDF draft is not available"
         result = "warning"
     else:
-        detail = "author-neutral DOCX structure with six inline figures and 12-page Word-rendered PDF verified; final author fields remain gated"
+        detail = "author-neutral DOCX structure with seven inline figures and a Word-rendered PDF verified; final author fields remain gated"
         result = "pass"
     _check(checks, "submission:docx-draft", result, "tools/audit_ijhe_docx_draft.py", detail)
 
@@ -855,6 +909,7 @@ def audit() -> dict[str, Any]:
         "docs/ijhe-smedis-transfer-boundary-2026-10-09.md",
         "docs/ijhe-preslhy-trial10-conditional-evidence-2026-10-09.md",
         "docs/ijhe-elvhys-conditional-evidence-2026-10-09.md",
+        "docs/ijhe-multifidelity-evidence-2026-10-10.md",
         "tools/benchmark_transient_dense_gas_3d.py",
         "tools/plot_ijhe_operator_comparison.py",
         "tools/plot_transient_3d_error_study.py",
@@ -870,6 +925,11 @@ def audit() -> dict[str, Any]:
         "tools/audit_ijhe_figure_artifacts.py",
         "tools/audit_ijhe_docx_draft.py",
         "tools/audit_open_channel_h2_dataset.py",
+        "tools/audit_usn_carpark.py",
+        "tools/audit_hytunnel_ps.py",
+        "tools/audit_multifidelity_cfd_evidence.py",
+        "tools/validate_usn_enclosure_dynamic.py",
+        "src/degali/addons/transient_enclosure.py",
     )
     for relative in required_files:
         _path_check(checks, relative)
@@ -932,7 +992,21 @@ def audit() -> dict[str, Any]:
         checks,
         "MANUSCRIPT_LH2_VALIDATION.md",
         "manuscript:main-artifacts",
-        ("Table 1.", "Table 2.", "Figure 1.", "Figure 4.", "FFI/DNV horizontal-release arc residual map", "Tests 4 and 6", "Figure 6."),
+        ("Table 1.", "Table 2.", "Table 3.", "Figure 1.", "Figure 4.", "FFI/DNV horizontal-release arc residual map", "Tests 4 and 6", "Figure 6.", "Figure 7."),
+    )
+    _text_check(
+        checks,
+        "MANUSCRIPT_LH2_VALIDATION.md",
+        "manuscript:bounded-enclosure-validation",
+        (
+            "pooled Experiments",
+            "MAE = 0.282 vol%p",
+            "RMSE = 0.332 vol%p",
+            "r = 0.980",
+            "first-arrival MAE is 3.70 s",
+            "flammable-duration MAE",
+            "retrospective parameter-holdout evidence",
+        ),
     )
     _text_check(
         checks,
@@ -967,7 +1041,7 @@ def audit() -> dict[str, Any]:
         checks,
         "docs/ijhe-figure-table-register.md",
         "submission:figure-table-register",
-        ("Fig. 6", "Table 2", "Location / generation source", "Supplementary tables"),
+        ("Fig. 6", "Fig. 7", "Table 2", "Table 3", "Location / generation source", "Supplementary tables"),
     )
     _text_check(
         checks,
@@ -1000,6 +1074,7 @@ def audit() -> dict[str, Any]:
     _preslhy_manifest_check(checks)
     _preslhy_manifest_index_check(checks)
     _preslhy_public_retrieval_check(checks)
+    _usn_enclosure_validation_check(checks)
     error_study = _read_error_study(checks)
 
     # This remains intentionally a warning.  Conditional common-clock and

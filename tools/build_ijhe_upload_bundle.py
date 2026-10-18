@@ -1,8 +1,9 @@
-"""Build an author-neutral IJHE upload bundle from verified local artifacts.
+"""Build an IJHE upload bundle from verified local artifacts.
 
-The bundle intentionally refuses to imply final submission readiness while
-author metadata and matched field evidence remain unresolved. It copies only
-manuscript-facing source/derived files; third-party raw data are never copied.
+The default remains an author-neutral review bundle. ``--author-approved``
+uses the approved manuscript/cover-letter artifacts and closes only the author
+metadata gate; matched-event evidence remains independently bounded. Third-
+party raw data are never copied.
 """
 
 from __future__ import annotations
@@ -19,19 +20,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 FILES = {
-    "Manuscript.docx": ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-09.docx",
-    "Manuscript.pdf": ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-09.pdf",
+    "Manuscript.docx": ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-10.docx",
+    "Manuscript.pdf": ROOT / "outputs" / "ijhe-manuscript-draft-2026-10-10.pdf",
     "Manuscript_source.md": ROOT / "MANUSCRIPT_LH2_VALIDATION.md",
     "Supplementary_Information.md": ROOT / "IJHE_SUPPLEMENTARY_INFORMATION.md",
-    "Supplementary_Information.docx": ROOT / "outputs" / "ijhe-supplementary-information-2026-10-09.docx",
-    "Supplementary_Information.pdf": ROOT / "outputs" / "ijhe-supplementary-information-2026-10-09.pdf",
-    "Highlights.docx": ROOT / "outputs" / "ijhe-highlights-2026-10-09.docx",
+    "Supplementary_Information.docx": ROOT / "outputs" / "ijhe-supplementary-information-2026-10-10.docx",
+    "Supplementary_Information.pdf": ROOT / "outputs" / "ijhe-supplementary-information-2026-10-10.pdf",
+    "Highlights.docx": ROOT / "outputs" / "ijhe-highlights-2026-10-10.docx",
     "Highlights.txt": ROOT / "IJHE_HIGHLIGHTS.md",
     "Cover_letter_draft.md": ROOT / "IJHE_COVER_LETTER_DRAFT.md",
     "Graphical_abstract.svg": ROOT / "IJHE_GRAPHICAL_ABSTRACT.svg",
     "Graphical_abstract.pdf": ROOT / "outputs" / "ijhe-graphical-abstract-2026-10-09.pdf",
-    "Figures_combined_review.pdf": ROOT / "outputs" / "ijhe-figures-combined-2026-10-09-v2.pdf",
-    "Submission_manifest.json": ROOT / "outputs" / "ijhe-submission-manifest-2026-10-09.json",
+    "Figures_combined_review.pdf": ROOT / "outputs" / "ijhe-figures-combined-2026-10-10-v5.pdf",
+    "Submission_manifest.json": ROOT / "outputs" / "ijhe-submission-manifest-2026-10-10.json",
     "Submission_readiness.md": ROOT / "docs" / "ijhe-submission-readiness.md",
     "Author_intake.md": ROOT / "docs" / "ijhe-author-submission-intake.md",
     "Closeout_worksheet.md": ROOT / "docs" / "ijhe-closeout-worksheet.md",
@@ -39,6 +40,9 @@ FILES = {
     "Final_gap_audit.md": ROOT / "docs" / "ijhe-final-gap-audit-2026-10-09.md",
     "External_evidence_search.md": ROOT / "docs" / "ijhe-external-evidence-search-2026-10-09.md",
     "ELVHYS_conditional_evidence.md": ROOT / "docs" / "ijhe-elvhys-conditional-evidence-2026-10-09.md",
+    "Multifidelity_evidence.md": ROOT / "docs" / "ijhe-multifidelity-evidence-2026-10-10.md",
+    "USN_enclosure_validation_report.md": ROOT / "outputs" / "usn-enclosure-dynamic-validation-2026-10-10" / "REPORT.md",
+    "USN_enclosure_validation_metrics.json": ROOT / "outputs" / "usn-enclosure-dynamic-validation-2026-10-10" / "metrics.json",
     "PRESLHY_Trial10_conditional_evidence.md": ROOT / "docs" / "ijhe-preslhy-trial10-conditional-evidence-2026-10-09.md",
     "PRESLHY_Trial10_field_evidence_manifest.json": ROOT / "outputs" / "preslhy-e35-trial10-evidence-2026-10-09-v2" / "field-evidence-manifest.json",
     "PRESLHY_Trial10_field_audit_execution.json": ROOT / "outputs" / "preslhy-e35-trial10-evidence-2026-10-09-v2" / "field-audit-execution.json",
@@ -47,6 +51,14 @@ FILES = {
     "PRESLHY_conditional_manifest_index.json": ROOT / "outputs" / "preslhy-conditional-manifest-index-2026-10-09.json",
     "Center_operational_data_audit.md": ROOT / "docs" / "ijhe-center-operational-data-audit-2026-10-09.md",
     "Research_requirements.txt": ROOT / "requirements-research.txt",
+}
+
+
+AUTHOR_APPROVED_FILES = {
+    "Manuscript.docx": ROOT / "outputs" / "ijhe-manuscript-author-approved-2026-10-10.docx",
+    "Manuscript.pdf": ROOT / "outputs" / "ijhe-manuscript-author-approved-2026-10-10.pdf",
+    "Cover_letter.docx": ROOT / "outputs" / "ijhe-cover-letter-author-approved-2026-10-10.docx",
+    "Author_approval.md": ROOT / "docs" / "ijhe-author-approval-2026-10-10.md",
 }
 
 
@@ -111,7 +123,7 @@ def _validate_preslhy_manifest(path: Path = PRESLHY_MANIFEST) -> dict[str, objec
     }
 
 
-def build(output: Path) -> dict[str, object]:
+def build(output: Path, *, author_approved: bool = False) -> dict[str, object]:
     output = output.resolve()
     if output.exists() and any(output.iterdir()):
         raise FileExistsError(f"output directory not empty: {output}")
@@ -119,9 +131,17 @@ def build(output: Path) -> dict[str, object]:
 
     preslhy_gate = _validate_preslhy_manifest()
 
+    files = dict(FILES)
+    if author_approved:
+        manuscript_text = (ROOT / "MANUSCRIPT_LH2_VALIDATION.md").read_text(encoding="utf-8")
+        cover_text = (ROOT / "IJHE_COVER_LETTER_DRAFT.md").read_text(encoding="utf-8")
+        if "[AUTHOR TO CONFIRM" in manuscript_text or "[AUTHOR TO CONFIRM" in cover_text:
+            raise ValueError("author-approved bundle requested while author placeholders remain")
+        files.update(AUTHOR_APPROVED_FILES)
+
     copied: list[dict[str, object]] = []
     missing: list[str] = []
-    for name, source in FILES.items():
+    for name, source in files.items():
         if not source.is_file():
             missing.append(str(source.relative_to(ROOT)))
             continue
@@ -145,26 +165,47 @@ def build(output: Path) -> dict[str, object]:
             "sha256": sha256(target),
         })
 
-    status = {
-        "bundle_status": "draft_author_input_pending",
-        "generated_utc": datetime.now(timezone.utc).isoformat(),
-        "author_neutral": True,
-        "final_upload_allowed": False,
-        "preslhy_evidence_gate": preslhy_gate,
-        "remaining_gates": [
+    remaining_gates = [
+        "obtain custodian-confirmed sensor calibration and measured three-dimensional site geometry before strengthening the matched-event claim",
+        "complete the journal portal checks and final permissions review",
+    ]
+    if not author_approved:
+        remaining_gates[:0] = [
             "confirm complete author list, order, affiliations, ORCIDs and corresponding author",
             "complete author contributions, funding, competing interests, exclusive-submission and preprint/prior-publication declarations",
-            "obtain custodian-confirmed sensor calibration and measured three-dimensional site geometry for the matched transient event",
-            "rerun strict DOCX export, portal checks and permissions review after author edits",
-        ],
+            "rerun strict DOCX export after author edits",
+        ]
+    status = {
+        "bundle_status": (
+            "author_approved_evidence_bounded"
+            if author_approved
+            else "draft_author_input_pending"
+        ),
+        "generated_utc": datetime.now(timezone.utc).isoformat(),
+        "author_neutral": not author_approved,
+        "author_approval_recorded": author_approved,
+        "final_upload_allowed": False,
+        "preslhy_evidence_gate": preslhy_gate,
+        "remaining_gates": remaining_gates,
         "copied_files": copied,
         "missing_files": missing,
     }
     (output / "BUNDLE_STATUS.md").write_text(
-        "# IJHE upload draft bundle\n\n"
-        "This is an author-neutral draft bundle for internal co-author review. "
-        "It is not final-upload-ready: author/declaration placeholders and the "
-        "matched field-evidence gate remain open. The conditional PRESLHY Trial 10 "
+        (
+            "# IJHE author approved upload bundle\n\n"
+            if author_approved
+            else "# IJHE upload draft bundle\n\n"
+        )
+        + (
+            "The author metadata and declarations in this bundle are approved. "
+            "The matched field-evidence gate remains conditional, so the package "
+            "retains the manuscript's bounded claim language. "
+            if author_approved
+            else "This is an author-neutral draft bundle for internal co-author review. "
+            "It is not final-upload-ready: author/declaration placeholders and the "
+            "matched field-evidence gate remain open. "
+        )
+        + "The conditional PRESLHY Trial 10 "
         "note, multi-event manifest index and public retrieval audits are included as derived evidence; "
         "no third-party raw workbook, report PDF or proprietary source is copied here.\n\n"
         f"The bundled PRESLHY gate is `{preslhy_gate['status']}` with "
@@ -184,8 +225,13 @@ def build(output: Path) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument(
+        "--author-approved",
+        action="store_true",
+        help="use the approved author metadata and strict manuscript artifacts",
+    )
     args = parser.parse_args()
-    result = build(args.output_dir)
+    result = build(args.output_dir, author_approved=args.author_approved)
     print(json.dumps({
         "output": str(args.output_dir),
         "status": result["bundle_status"],

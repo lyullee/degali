@@ -33,6 +33,23 @@ from .axisymmetric_jet import (
     entrain_and_heat_initial_plug,
 )
 from .hydrogen_eos import HydrogenGasDeparture, hydrogen_gas_departure
+from .hybrid_amr_executor import (HybridAMRExecutionResult, HybridAMRExecutor, MassRequest,
+                                  run_solver_with_patch_flux_collector)
+from .hybrid_amr_executor import prepare_patch_flux_collector
+from .hybrid_amr_executor import run_solver_with_prepared_patch_flux
+from .interface_mass_application import apply_interface_mass_to_field
+from .obstacle_layer_coupling import (
+    HeightResolvedBoundaryPacket,
+    collapse_packet_series,
+    export_height_resolved_packets,
+)
+from .hybrid_field_audit import (HybridFieldAudit, aggregate_substeps_to_coarse,
+                                 infer_net_internal_flux_rate,
+                                 threshold_region_metrics,
+                                 audit_hybrid_mass_histories, audit_solver_results,
+                                 audit_solver_results_with_patch_substeps,
+                                 audit_partitioned_solver_results,
+                                 audit_partitioned_solver_results_with_plan)
 from .energy_crosswind import (
     IndependentEnergyCrosswind,
     IndependentEnergyJetResult,
@@ -79,6 +96,153 @@ from .transient_dense_gas_3d import (
     TransientDenseGas3DResult,
     solve_transient_dense_gas_3d,
 )
+from .fast_obstacle_transport import (
+    FAST_OBSTACLE_TRANSPORT_SCHEMA,
+    FastObstacleReceptor,
+    FastObstacleTransportConfig,
+    FastObstacleTransportResult,
+    solve_fast_obstacle_transport,
+)
+from .fast_obstacle_transport_3d import (
+    FAST_OBSTACLE_TRANSPORT_3D_SCHEMA,
+    FastObstacleReceptor3D,
+    FastObstacleTransport3DConfig,
+    FastObstacleTransport3DResult,
+    solve_fast_obstacle_transport_3d,
+)
+from .hybrid_interface import (
+    InterfaceFluxLedger, HybridInterfaceCoupler, conservative_interface_transfer,
+)
+from .hybrid_conservative_exchange import (
+    ConservativeInterfacePacket,
+    ConservativeControlVolumeState,
+    exchange_conservative_pair,
+    conserved_totals,
+)
+from .hybrid_flux_packets import (
+    CartesianInterfacePlane,
+    outgoing_packet_from_face_fluxes,
+    boundary_cell_mask,
+    apply_incoming_packet_to_fields,
+    apply_incoming_momentum_to_velocity,
+    apply_incoming_momentum_characteristic_to_velocity,
+)
+from .hybrid_solver_bridge import SolverBridgeSide, SynchronizedSolverBridge
+from .hybrid_amr import (ObstaclePatchBounds, PatchFluxAccumulator, cartesian_face_coordinates,
+                         make_obstacle_patch_bounds,
+                         conservative_patch_remap, overlap_mass_remap_to_patch)
+from .hybrid_amr import extract_patch_boundary_flux
+from .hybrid_amr_plan import HybridAMRRunPlan
+from .resolved_obstacle_flow_2d import (
+    RESOLVED_OBSTACLE_FLOW_2D_SCHEMA,
+    ResolvedObstacleFlow2DConfig,
+    ResolvedObstacleFlow2DResult,
+    solve_resolved_obstacle_flow_2d,
+)
+from .resolved_obstacle_flow_3d import (
+    RESOLVED_OBSTACLE_FLOW_3D_SCHEMA,
+    RESOLVED_OBSTACLE_FLOW_3D_RESTART_SCHEMA,
+    ResolvedInletVelocityHistory3D,
+    ResolvedSourceMomentumHistory3D,
+    ResolvedObstacleFlow3DConfig,
+    ResolvedObstacleFlow3DRestartState,
+    ResolvedObstacleFlow3DResult,
+    read_resolved_obstacle_flow_3d_restart,
+    rebind_restart_for_corrector_tolerance_audit,
+    solve_resolved_obstacle_flow_3d,
+    write_resolved_obstacle_flow_3d_restart,
+)
+from .continuous_barrier_resolved_3d import (
+    audit_continuous_barrier_physics,
+    build_continuous_barrier_resolved_config,
+)
+from .hydrogen_air_thermodynamics import (
+    HydrogenAirActiveScalarClosure,
+    HydrogenAirThermodynamicState,
+)
+from .binary_mixture_thermodynamics import (
+    BinaryIdealGasMixtureClosure,
+    BinaryIdealGasMixtureState,
+)
+from .finite_volume_initial_cloud_3d import (
+    FiniteVolumeInitialCloud3D,
+    RegularPolygonPrismInitialCloud,
+    initialise_regular_polygon_prism_cloud,
+)
+from .binary_mixture_corrector_3d import (
+    BINARY_MIXTURE_CORRECTOR_3D_SCHEMA,
+    BinaryMixtureCorrector3DResult,
+    solve_binary_mixture_initial_cloud_step_3d,
+)
+from .variable_density_projection_3d import (
+    VARIABLE_DENSITY_MASS_FLUX_PROJECTION_SCHEMA,
+    VariableDensityMassFluxProjection3DResult,
+    project_variable_density_mass_flux_3d,
+)
+from .variable_density_momentum_3d import (
+    VARIABLE_DENSITY_MOMENTUM_3D_SCHEMA,
+    VariableDensityMomentum3DResult,
+    advance_variable_density_momentum_3d,
+)
+from .low_mach_thermal_corrector_3d import (
+    LOW_MACH_THERMAL_CORRECTOR_3D_SCHEMA,
+    LowMachThermalCorrector3DResult,
+    solve_low_mach_thermal_corrector_3d,
+)
+from .subgrid_viscosity_3d import (
+    SUBGRID_VISCOSITY_3D_SCHEMA,
+    velocity_gradient_tensor_lattice,
+    smagorinsky_eddy_viscosity_lattice,
+    wale_eddy_viscosity_lattice,
+    subgrid_relaxation_time_lattice,
+)
+from .atmospheric_surface_layer_mixing import (
+    ATMOSPHERIC_SURFACE_LAYER_MIXING_SCHEMA,
+    NeutralSurfaceLayerMixing,
+)
+from .dense_gas_stratification_3d import (
+    DENSE_GAS_STRATIFICATION_3D_SCHEMA,
+    GRADIENT_RICHARDSON_SUMMARY_SCHEMA,
+    GradientRichardsonDiagnostic3D,
+    finite_volume_vertical_gradient,
+    diagnose_gradient_richardson_3d,
+    summarize_gradient_richardson_regions,
+)
+from .conservative_nested_handoff_3d import (
+    CONSERVATIVE_NESTED_HANDOFF_3D_SCHEMA,
+    ConservativeNestedHandoff3DResult,
+    NestedOuterInletFrame3D,
+    conservative_overlap_remap_flux_density_2d,
+    nested_outer_inlet_frame_at,
+    remap_conservative_nested_handoff_result_3d,
+    remap_conservative_nested_handoff_3d,
+)
+from .nested_outer_binary_flow_3d import (
+    NESTED_OUTER_BINARY_FLOW_3D_SCHEMA,
+    NestedOuterBinaryFlow3DState,
+    NestedOuterBinaryFlow3DStepResult,
+    initialise_nested_outer_binary_flow_3d,
+    advance_nested_outer_binary_flow_step_3d,
+)
+from .binary_mixture_handoff_plane_3d import (
+    BINARY_MIXTURE_HANDOFF_PLANE_3D_SCHEMA,
+    BinaryMixtureHandoffPlane3DFrame,
+    BinaryMixtureHandoffPlane3DRequest,
+    extract_binary_mixture_handoff_plane_3d,
+)
+from .conservative_handoff_hdf5_3d import (
+    CONSERVATIVE_HANDOFF_HDF5_3D_SCHEMA,
+    ConservativeHandoffHdf5Reader3D,
+    ConservativeHandoffHdf5Writer3D,
+    load_conservative_handoff_hdf5_3d,
+)
+from .transient_enclosure import (
+    TRANSIENT_ENCLOSURE_SCHEMA,
+    EnclosureForcing,
+    TransientEnclosureConfig,
+    TransientEnclosureResult,
+    solve_transient_enclosure,
+)
 from .event_balanced_metrics import (
     EVENT_BALANCED_METRICS_SCHEMA,
     EventBalancedMetricScore,
@@ -104,6 +268,7 @@ from .time_history_io import (
 )
 from .site_geometry import (
     AxisAlignedCuboid,
+    CircularArcWall,
     OrientedCuboid,
     ObstacleEncounter,
     ObstacleScreenResult,
@@ -136,6 +301,15 @@ from .notional import (
     expand_measured_throat_to_ambient,
     isentropic_throat,
     notional_nozzle,
+)
+from .high_pressure_source_handoff_3d import (
+    AmbientPressureHydrogenJet,
+    LowMachHydrogenHandoff3D,
+    ResolvedSourceConfigFields3D,
+    ambient_pressure_jet_from_energy_nozzle,
+    declared_ambient_pressure_hydrogen_jet,
+    low_mach_handoff_from_ambient_pressure_jet,
+    low_mach_handoff_from_energy_nozzle,
 )
 from .cryogenic_blowdown import (
     CryogenicBlowdownConfig,
@@ -596,6 +770,70 @@ __all__ = [
     "redistribute_vertical_profile",
     "TRANSIENT_DENSE_GAS_3D_SCHEMA", "DenseGas3DReceptor",
     "TransientDenseGas3DConfig", "TransientDenseGas3DResult",
+    "FAST_OBSTACLE_TRANSPORT_SCHEMA", "FastObstacleReceptor",
+    "FastObstacleTransportConfig", "FastObstacleTransportResult",
+    "solve_fast_obstacle_transport",
+    "FAST_OBSTACLE_TRANSPORT_3D_SCHEMA", "FastObstacleReceptor3D",
+    "FastObstacleTransport3DConfig", "FastObstacleTransport3DResult",
+    "solve_fast_obstacle_transport_3d",
+    "InterfaceFluxLedger", "HybridInterfaceCoupler", "conservative_interface_transfer",
+    "ConservativeInterfacePacket", "ConservativeControlVolumeState",
+    "exchange_conservative_pair", "conserved_totals",
+    "CartesianInterfacePlane", "outgoing_packet_from_face_fluxes",
+    "boundary_cell_mask", "apply_incoming_packet_to_fields",
+    "apply_incoming_momentum_to_velocity",
+    "apply_incoming_momentum_characteristic_to_velocity",
+    "SolverBridgeSide", "SynchronizedSolverBridge",
+    "ObstaclePatchBounds", "make_obstacle_patch_bounds", "conservative_patch_remap",
+    "HybridAMRRunPlan",
+    "RESOLVED_OBSTACLE_FLOW_2D_SCHEMA", "ResolvedObstacleFlow2DConfig",
+    "ResolvedObstacleFlow2DResult", "solve_resolved_obstacle_flow_2d",
+    "RESOLVED_OBSTACLE_FLOW_3D_SCHEMA", "ResolvedInletVelocityHistory3D",
+    "ResolvedSourceMomentumHistory3D",
+    "RESOLVED_OBSTACLE_FLOW_3D_RESTART_SCHEMA",
+    "ResolvedObstacleFlow3DConfig", "ResolvedObstacleFlow3DRestartState",
+    "ResolvedObstacleFlow3DResult", "read_resolved_obstacle_flow_3d_restart",
+    "rebind_restart_for_corrector_tolerance_audit",
+    "solve_resolved_obstacle_flow_3d", "write_resolved_obstacle_flow_3d_restart",
+    "audit_continuous_barrier_physics",
+    "build_continuous_barrier_resolved_config",
+    "HydrogenAirActiveScalarClosure", "HydrogenAirThermodynamicState",
+    "VARIABLE_DENSITY_MASS_FLUX_PROJECTION_SCHEMA",
+    "VariableDensityMassFluxProjection3DResult",
+    "project_variable_density_mass_flux_3d",
+    "VARIABLE_DENSITY_MOMENTUM_3D_SCHEMA",
+    "VariableDensityMomentum3DResult",
+    "advance_variable_density_momentum_3d",
+    "LOW_MACH_THERMAL_CORRECTOR_3D_SCHEMA",
+    "LowMachThermalCorrector3DResult",
+    "solve_low_mach_thermal_corrector_3d",
+    "SUBGRID_VISCOSITY_3D_SCHEMA",
+    "velocity_gradient_tensor_lattice",
+    "smagorinsky_eddy_viscosity_lattice",
+    "wale_eddy_viscosity_lattice",
+    "subgrid_relaxation_time_lattice",
+    "ATMOSPHERIC_SURFACE_LAYER_MIXING_SCHEMA",
+    "NeutralSurfaceLayerMixing",
+    "DENSE_GAS_STRATIFICATION_3D_SCHEMA",
+    "GRADIENT_RICHARDSON_SUMMARY_SCHEMA",
+    "GradientRichardsonDiagnostic3D",
+    "finite_volume_vertical_gradient",
+    "diagnose_gradient_richardson_3d",
+    "summarize_gradient_richardson_regions",
+    "CONSERVATIVE_HANDOFF_HDF5_3D_SCHEMA",
+    "ConservativeHandoffHdf5Reader3D",
+    "ConservativeHandoffHdf5Writer3D",
+    "load_conservative_handoff_hdf5_3d",
+    "NESTED_OUTER_BINARY_FLOW_3D_SCHEMA",
+    "NestedOuterBinaryFlow3DState", "NestedOuterBinaryFlow3DStepResult",
+    "initialise_nested_outer_binary_flow_3d",
+    "advance_nested_outer_binary_flow_step_3d",
+    "CONSERVATIVE_NESTED_HANDOFF_3D_SCHEMA",
+    "ConservativeNestedHandoff3DResult",
+    "NestedOuterInletFrame3D",
+    "conservative_overlap_remap_flux_density_2d",
+    "nested_outer_inlet_frame_at",
+    "remap_conservative_nested_handoff_3d",
     "solve_transient_dense_gas_3d",
     "EVENT_BALANCED_METRICS_SCHEMA", "EventMetricObservation", "EventMetricSummary",
     "EventBalancedMetricScore", "score_event_balanced_metrics",
@@ -605,7 +843,7 @@ __all__ = [
     "TIME_HISTORY_CSV_INPUT_SCHEMA", "SourceHistoryCsvMap", "WindHistoryCsvMap",
     "ImportedSourceHistory", "ImportedWindHistory",
     "read_source_history_csv", "read_wind_history_csv",
-    "WindFrame", "AxisAlignedCuboid", "OrientedCuboid", "TransverseWall",
+    "WindFrame", "AxisAlignedCuboid", "CircularArcWall", "OrientedCuboid", "TransverseWall",
     "SegmentIntersection", "ObstacleEncounter", "ObstacleScreenResult",
     "screen_trajectory",
     "DenseGasFenceBenchmark", "DenseGasFenceObservation",
@@ -617,6 +855,12 @@ __all__ = [
     "IsentropicThroat", "isentropic_throat",
     "EnergyConservingNotionalNozzle", "energy_conserving_notional_nozzle",
     "MeasuredThroatExpansion", "expand_measured_throat_to_ambient",
+    "AmbientPressureHydrogenJet", "LowMachHydrogenHandoff3D",
+    "ResolvedSourceConfigFields3D",
+    "ambient_pressure_jet_from_energy_nozzle",
+    "declared_ambient_pressure_hydrogen_jet",
+    "low_mach_handoff_from_ambient_pressure_jet",
+    "low_mach_handoff_from_energy_nozzle",
     "CryogenicBlowdownConfig", "CryogenicBlowdownState",
     "CryogenicBlowdownResult", "TransientTankWall", "TransientPipeWall",
     "blowdown_state_to_lh2_source",

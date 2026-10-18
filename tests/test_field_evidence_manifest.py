@@ -14,6 +14,7 @@ from degali.addons.field_evidence_manifest import (
     read_field_evidence_manifest_json,
     write_field_evidence_manifest_json,
 )
+from degali.validation.field_manifest_runtime import verify_runtime_manifest
 
 
 def _write_channels(root):
@@ -106,6 +107,17 @@ def test_manifest_writer_and_reader_pin_selected_files(tmp_path, capsys):
     assert withheld["verification"]["selected_files_verified"] is False
 
 
+def test_runtime_manifest_gate_keeps_conditional_package_out_of_quantitative_run(tmp_path):
+    manifest = _manifest(tmp_path / "evidence")
+    output = tmp_path / "manifest-execution.json"
+    write_field_evidence_manifest_json(manifest, output)
+
+    record = verify_runtime_manifest(output)
+    assert record["quantitative_evidence_readiness"]["status"] == "conditional"
+    with pytest.raises(ValueError, match="quantitative FieldEvidenceManifest gate"):
+        verify_runtime_manifest(output, require_quantitative=True)
+
+
 def test_manifest_explicit_sensor_and_operator_metadata_is_accepted(tmp_path):
     paths = _write_channels(tmp_path / "evidence")
     registry = tmp_path / "evidence" / "sensor_registry.csv"
@@ -176,6 +188,52 @@ def test_manifest_nominal_sensor_specification_remains_conditional(tmp_path):
     readiness = manifest.readiness_record()
     assert readiness["status"] == "conditional"
     assert readiness["missing_requirements"] == ["sensor_calibration_certificate"]
+
+
+def test_quantitative_readiness_requires_and_accepts_clock_alignment_metadata(tmp_path):
+    root = tmp_path / "evidence"
+    paths = _write_channels(root)
+    paths["common_clock"].write_text(
+        "common_clock_id,reference_time_utc,synchronization_method,offset_s,"
+        "uncertainty_s,covered_channels\n"
+        "clock-a,2026-09-21T00:00:00Z,PTP,0.012,0.004,"
+        "source_boundary;weather;receptor_observations\n",
+        encoding="utf-8",
+    )
+    registry = root / "sensor_registry.csv"
+    registry.write_text(
+        "sensor_set_id,sensor_id,calibration_id\n"
+        "sensor-set-a,s1,cal-a\n",
+        encoding="utf-8",
+    )
+    audit = audit_field_evidence(root)
+    manifest = FieldEvidenceManifest.from_audit(
+        audit,
+        manifest_id="manifest-clock-complete",
+        event_id="event-clock-complete",
+        selected_paths={channel: str(path) for channel, path in paths.items()},
+        dataset_id="dataset-clock-complete",
+        observed_row_count=1,
+        source_boundary_id="source-a",
+        weather_id="weather-a",
+        obstacle_geometry_id="obstacle-a",
+        receptor_geometry_id="receptors-a",
+        temporal_operator_id="mean-1s",
+        common_clock_id="clock-a",
+        sensor_set_id="sensor-set-a",
+        operator_id="operator-a",
+        sensor_registry_path=str(registry),
+        sensor_calibration_status="certified",
+    )
+    assert manifest.quantitative_readiness_record()["status"] == "accepted"
+    assert manifest.clock_alignment_record()["uncertainty_s"] == pytest.approx(0.004)
+
+
+def test_quantitative_readiness_withholds_legacy_clock_file(tmp_path):
+    manifest = _manifest(tmp_path / "evidence")
+    readiness = manifest.quantitative_readiness_record()
+    assert readiness["status"] == "conditional"
+    assert "common_clock_metadata" in readiness["missing_requirements"]
 
 
 def test_manifest_rejects_tampered_readiness_record(tmp_path):

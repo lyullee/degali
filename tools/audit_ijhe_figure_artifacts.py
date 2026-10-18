@@ -21,6 +21,7 @@ FIGURES = (
     ("tmp/ijhe-lh2-paper-figures/ffi-arc-residual-map.svg", False),
     ("tmp/ijhe-time-aligned/e35_lfl_uncertainty_envelope.svg", False),
     ("tmp/ijhe-decision-scenarios/decision_lfl_distances.svg", False),
+    ("outputs/usn-enclosure-dynamic-validation-2026-10-10/usn_enclosure_parameter_holdout.svg", False),
 )
 GRAPHICAL_ABSTRACT_MIN_WIDTH = 1328
 GRAPHICAL_ABSTRACT_MIN_HEIGHT = 531
@@ -83,6 +84,12 @@ def _record(relative: str, required: bool) -> dict[str, object]:
             record["error"] = (
                 f"graphical abstract is {pixel_width:g}x{pixel_height:g}px; "
                 f"minimum is {GRAPHICAL_ABSTRACT_MIN_WIDTH}x{GRAPHICAL_ABSTRACT_MIN_HEIGHT}px"
+            )
+        elif abs(pixel_width / pixel_height - GRAPHICAL_ABSTRACT_PREFERRED_ASPECT) > 0.01:
+            record["status"] = "invalid_aspect_ratio"
+            record["error"] = (
+                f"graphical abstract aspect ratio is {pixel_width / pixel_height:.4f}; "
+                f"preferred submission ratio is {GRAPHICAL_ABSTRACT_PREFERRED_ASPECT:.4f}"
             )
     return record
 

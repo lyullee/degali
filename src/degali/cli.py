@@ -733,6 +733,7 @@ def _cmd_field_evidence_manifest_verify(args) -> int:
         },
         "field_evidence_manifest": field_evidence_manifest_record(manifest),
         "evidence_readiness": manifest.readiness_record(),
+        "quantitative_evidence_readiness": manifest.quantitative_readiness_record(),
         "verification": {
             "selected_files_verified": True,
             "promotion_allowed": False,
@@ -797,6 +798,10 @@ def _cmd_field_evidence_manifest_create(args) -> int:
     output = write_field_evidence_manifest_json(manifest, args.output)
     print(f"field evidence manifest: {output}")
     print(f"evidence readiness: {manifest.readiness_record()['status']}")
+    print(
+        "quantitative evidence readiness: "
+        f"{manifest.quantitative_readiness_record()['status']}"
+    )
     print("promotion allowed: false")
     return 0
 
@@ -895,12 +900,33 @@ def _cmd_steady(args) -> int:
     return 0
 
 
+def _warn_observer_failures(field) -> None:
+    """Make captured legacy-transient observer failures visible to CLI users."""
+    failures = field.failures
+    if not failures:
+        return
+    print(
+        f"warning: {len(failures)} transient observer(s) failed; "
+        "their empty profiles are not zero-concentration predictions",
+        file=sys.stderr,
+    )
+    for failure in failures[:5]:
+        print(
+            f"  observer {failure.index}: {failure.failure_stage}: "
+            f"{failure.failure_type}: {failure.failure_message}",
+            file=sys.stderr,
+        )
+    if len(failures) > 5:
+        print(f"  ... and {len(failures) - 5} more", file=sys.stderr)
+
+
 def _cmd_transient(args) -> int:
     times = np.array(args.snapshot, dtype=float) if args.snapshot else None
     out = run_transient(
         args.deck, er1=args.er1, er2=args.er2, times=times,
         backend=args.backend,
     )
+    _warn_observer_failures(out.field)
     gas = out.source.case.gas
     print(f"Transient release: {gas.name}, "
           f"{len(out.field.observers)} observers, {len(out.snapshots)} snapshots")
@@ -923,6 +949,7 @@ def _cmd_dose(args) -> int:
     out = run_transient(
         args.deck, er1=args.er1, er2=args.er2, backend=args.backend
     )
+    _warn_observer_failures(out.field)
     receptors = [Receptor(x=x) for x in args.at]
     histories = out.dose(receptors)
     print(f"Concentration histories at {len(histories)} receptors")
@@ -1324,7 +1351,7 @@ def main(argv: list[str] | None = None) -> int:
     ):
         fs.add_argument(
             flag, dest=dest,
-            help=f"{dest}: one value or lower,nominal,upper ({unit})",
+            help=f"{dest}: one value or lower,nominal,upper ({unit.replace('%', '%%')})",
         )
     fs.add_argument(
         "--wind-direction-from-deg", dest="wind_direction_from_deg",

@@ -11,8 +11,10 @@ marks a model or a design basis as promoted.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import csv
 import hashlib
 import json
+import math
 from pathlib import Path
 from typing import Literal, Mapping
 
@@ -435,6 +437,137 @@ class FieldEvidenceManifest:
             ],
         }
 
+    def clock_alignment_record(self) -> dict[str, object]:
+        """Inspect the selected common-clock file for quantitative metadata.
+
+        A shared identifier alone is not enough for a transient concentration
+        score.  This fail-closed inspection accepts a one-row CSV or a JSON
+        object (optionally nested under ``clock_alignment``) containing a time
+        origin, synchronization method, offset, uncertainty, and covered
+        channels.
+        """
+        artifact = next(
+            item for item in self.channel_artifacts if item.channel == "common_clock"
+        )
+        path = Path(artifact.path)
+        try:
+            raw = path.read_text(encoding="utf-8-sig")
+            if path.suffix.lower() == ".json":
+                payload = json.loads(raw)
+                if isinstance(payload, Mapping) and isinstance(
+                    payload.get("clock_alignment"), Mapping
+                ):
+                    payload = payload["clock_alignment"]
+                if not isinstance(payload, Mapping):
+                    raise ValueError("clock JSON must contain an object")
+                row = dict(payload)
+            else:
+                rows = list(csv.DictReader(raw.splitlines()))
+                if len(rows) != 1:
+                    raise ValueError("common-clock CSV must contain exactly one metadata row")
+                row = dict(rows[0])
+        except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+            return {
+                "status": "withheld",
+                "missing_requirements": ["common_clock_metadata"],
+                "reason": f"common-clock metadata could not be read: {error}",
+            }
+
+        def first(*names: str) -> object | None:
+            for name in names:
+                value = row.get(name)
+                if value is not None and str(value).strip():
+                    return value
+            return None
+
+        reference = first(
+            "reference_time_utc", "time_origin_utc", "time_origin", "reference_time",
+        )
+        method = first("synchronization_method", "sync_method", "method")
+        offset = first("offset_s", "clock_offset_s", "time_offset_s")
+        uncertainty = first(
+            "uncertainty_s", "clock_uncertainty_s", "offset_uncertainty_s",
+        )
+        covered = first("covered_channels", "channels", "synchronized_channels")
+        missing = [
+            name for name, value in (
+                ("reference_time_utc", reference),
+                ("synchronization_method", method),
+                ("offset_s", offset),
+                ("uncertainty_s", uncertainty),
+                ("covered_channels", covered),
+            ) if value is None
+        ]
+        if missing:
+            return {
+                "status": "conditional",
+                "missing_requirements": ["common_clock_metadata"],
+                "missing_fields": missing,
+            }
+        try:
+            offset_value = float(offset)
+            uncertainty_value = float(uncertainty)
+        except (TypeError, ValueError) as error:
+            return {
+                "status": "conditional",
+                "missing_requirements": ["common_clock_metadata"],
+                "reason": f"clock offset/uncertainty is not numeric: {error}",
+            }
+        if not math.isfinite(offset_value) or not math.isfinite(uncertainty_value):
+            return {
+                "status": "conditional",
+                "missing_requirements": ["common_clock_metadata"],
+                "reason": "clock offset/uncertainty must be finite",
+            }
+        if uncertainty_value < 0.0:
+            return {
+                "status": "conditional",
+                "missing_requirements": ["common_clock_metadata"],
+                "reason": "clock uncertainty must be non-negative",
+            }
+        channels = tuple(
+            item.strip() for item in str(covered).replace(";", ",").split(",")
+            if item.strip()
+        )
+        required_channels = {
+            "source_boundary", "weather", "receptor_observations",
+        }
+        if not required_channels.issubset(channels):
+            return {
+                "status": "conditional",
+                "missing_requirements": ["common_clock_metadata"],
+                "reason": "clock metadata does not cover source, weather and receptors",
+                "covered_channels": list(channels),
+            }
+        return {
+            "status": "accepted",
+            "missing_requirements": [],
+            "reference_time_utc": str(reference).strip(),
+            "synchronization_method": str(method).strip(),
+            "offset_s": offset_value,
+            "uncertainty_s": uncertainty_value,
+            "covered_channels": list(channels),
+        }
+
+    def quantitative_readiness_record(self) -> dict[str, object]:
+        """Return readiness for quantitative scoring, including clock metadata."""
+        base = self.readiness_record()
+        alignment = self.clock_alignment_record()
+        missing = list(base["missing_requirements"])
+        if alignment["status"] != "accepted" and "common_clock_metadata" not in missing:
+            missing.append("common_clock_metadata")
+        return {
+            "status": "conditional" if missing else "accepted",
+            "missing_requirements": missing,
+            "promotion_allowed": False,
+            "gate_codes": [
+                "manifest_metadata_conditional" if missing
+                else "manifest_metadata_complete",
+                "manifest_not_promoted",
+            ],
+            "clock_alignment": alignment,
+        }
+
     def as_record(self) -> dict[str, object]:
         return {
             "schema": FIELD_EVIDENCE_MANIFEST_SCHEMA,
@@ -461,6 +594,7 @@ class FieldEvidenceManifest:
                 else self.sensor_registry_artifact.as_record()
             ),
             "evidence_readiness": self.readiness_record(),
+            "quantitative_evidence_readiness": self.quantitative_readiness_record(),
             "promotion_allowed": False,
             "gate_codes": ["manifest_files_verified", "manifest_not_promoted"],
         }
@@ -495,6 +629,7 @@ def field_evidence_manifest_from_mapping(
         optional={
             "sensor_set_id", "operator_id", "sensor_registry_artifact",
             "sensor_calibration_status", "evidence_readiness",
+            "quantitative_evidence_readiness",
         },
     )
     if data["schema"] != FIELD_EVIDENCE_MANIFEST_SCHEMA:
@@ -595,6 +730,15 @@ def field_evidence_manifest_from_mapping(
         if dict(supplied_readiness) != manifest.readiness_record():
             raise ValueError(
                 "manifest.evidence_readiness must match the declared metadata"
+            )
+    if "quantitative_evidence_readiness" in data:
+        supplied_quantitative_readiness = _mapping(
+            data["quantitative_evidence_readiness"],
+            "manifest.quantitative_evidence_readiness",
+        )
+        if dict(supplied_quantitative_readiness) != manifest.quantitative_readiness_record():
+            raise ValueError(
+                "manifest.quantitative_evidence_readiness must match the declared metadata"
             )
     return manifest
 

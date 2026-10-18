@@ -36,6 +36,7 @@ JOURNAL_PATH_LABELS = {
     "docs/ijhe-ffi-site-geometry-boundary-2026-10-09.md": "the FFI site-geometry boundary record",
     "docs/ijhe-elvhys-conditional-evidence-2026-10-09.md": "the ELVHYS boundary record",
     "docs/ijhe-smedis-transfer-boundary-2026-10-09.md": "the SMEDIS transfer-boundary record",
+    "docs/ijhe-multifidelity-evidence-2026-10-10.md": "the multi-fidelity evidence record",
     "docs/open-channel-h2-boundary.md": "the open-channel H2 boundary record",
     "docs/ffi-test6-decomposition.md": "the Test 6 decomposition record",
     "docs/applied-energy-evidence-2026-10-03.md": "the paired comparison evidence record",
@@ -46,10 +47,14 @@ JOURNAL_PATH_LABELS = {
     "tools/audit_time_aligned_uncertainty.py": "the time-aligned audit script",
     "tools/audit_decision_scenarios.py": "the decision-scenario audit script",
     "tools/audit_open_channel_h2_dataset.py": "the open-channel H2 audit script",
+    "tools/audit_usn_carpark.py": "the USN dynamic audit script",
+    "tools/audit_hytunnel_ps.py": "the HyTunnel spatial audit script",
+    "tools/audit_multifidelity_cfd_evidence.py": "the public CFD-context audit script",
+    "tools/validate_usn_enclosure_dynamic.py": "the enclosure dynamic validation script",
 }
 # The combined figure PDF is an evidence bundle rather than the manuscript's
-# figure-number order.  Keep an explicit, review-file mapping so each caption
-# is paired with the correct panel when the six main figures are embedded.
+# figure-number order. Keep an explicit, review-file mapping so each caption
+# is paired with the correct panel when the main figures are embedded.
 FIGURE_IMAGE_DIR = ROOT / "outputs" / "ijhe-main-figure-images-2026-10-09-clean"
 
 
@@ -207,6 +212,7 @@ def _add_table(doc: Document, rows: list[list[str]]) -> None:
     if not rows:
         return
     width = max(len(row) for row in rows)
+    compact = bool(rows and "Pearson r" in rows[0] and rows[0][0] == "Experiment")
     table = doc.add_table(rows=1, cols=width)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     table.style = "Table Grid"
@@ -218,11 +224,11 @@ def _add_table(doc: Document, rows: list[list[str]]) -> None:
         header[col].vertical_alignment = WD_CELL_VERTICAL_ALIGNMENT.CENTER
         _set_cell_shading(header[col], "1F4E78")
         _set_cell_borders(header[col])
-        _set_cell_margins(header[col])
+        _set_cell_margins(header[col], top=45 if compact else 90, bottom=45 if compact else 90)
         for run in header[col].paragraphs[0].runs:
             run.font.bold = True
             run.font.color.rgb = RGBColor(255, 255, 255)
-            run.font.size = Pt(8.5)
+            run.font.size = Pt(8 if compact else 8.5)
         for paragraph in header[col].paragraphs:
             paragraph.paragraph_format.keep_with_next = True
     for row_index, row in enumerate(rows[1:]):
@@ -234,11 +240,11 @@ def _add_table(doc: Document, rows: list[list[str]]) -> None:
             if row_index % 2:
                 _set_cell_shading(cells[col], "F2F6F9")
             _set_cell_borders(cells[col])
-            _set_cell_margins(cells[col])
+            _set_cell_margins(cells[col], top=45 if compact else 90, bottom=45 if compact else 90)
             for paragraph in cells[col].paragraphs:
                 paragraph.paragraph_format.space_after = Pt(1)
                 for run in paragraph.runs:
-                    run.font.size = Pt(8.5)
+                    run.font.size = Pt(8 if compact else 8.5)
     doc.add_paragraph().paragraph_format.space_after = Pt(2)
 
 
@@ -300,6 +306,7 @@ def build(
     index = 0
     paragraph_buffer: list[str] = []
     seen_title = False
+    in_references = False
 
     def flush() -> None:
         if not paragraph_buffer:
@@ -317,7 +324,11 @@ def build(
             p.paragraph_format.keep_with_next = raw.startswith("**Table ")
         else:
             p = doc.add_paragraph()
-        p.add_run(_plain_inline(raw))
+        run = p.add_run(_plain_inline(raw))
+        if in_references and not raw.startswith(("**Figure ", "**Table ")):
+            run.font.size = Pt(9.5)
+            p.paragraph_format.space_after = Pt(4)
+            p.paragraph_format.line_spacing = 1.0
 
     while index < len(lines):
         line = lines[index]
@@ -344,6 +355,7 @@ def build(
             if "5.9 Decision-boundary" in heading.group(2):
                 p.paragraph_format.keep_with_next = True
             p.add_run(_plain_inline(heading.group(2)))
+            in_references = heading.group(2).strip().lower() == "references"
             index += 1
             continue
         if line.strip().startswith("|"):

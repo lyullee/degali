@@ -19,7 +19,7 @@ New-Item -ItemType Directory -Force -Path (Split-Path -Parent $png), (Split-Path
 
 $pngArgs = @(
     "--headless=new", "--disable-gpu", "--hide-scrollbars", "--no-first-run",
-    "--no-default-browser-check", "--user-data-dir=`"$pngProfile`"", "--window-size=1400,760",
+    "--no-default-browser-check", "--user-data-dir=`"$pngProfile`"", "--window-size=1400,560",
     "--screenshot=`"$png`"", "`"$svg`""
 )
 $pngProcess = Start-Process -FilePath $BrowserPath -ArgumentList $pngArgs -Wait -PassThru -WindowStyle Hidden

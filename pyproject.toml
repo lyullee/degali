@@ -31,7 +31,11 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Atmospheric Science",
   "Topic :: Scientific/Engineering :: Physics",
 ]
-dependencies = ["numpy>=1.23", "scipy>=1.10"]
+dependencies = [
+  "numpy>=1.23",
+  "scipy>=1.11",
+  "pyamg>=5.3,<6",
+]
 
 [project.optional-dependencies]
 coolprop = ["CoolProp>=6.4"]
@@ -42,6 +46,7 @@ test = [
   "openpyxl>=3.1",
   "pypdf>=4",
   "python-docx>=1.1",
+  "h5py>=3.11",
   "xlrd>=2.0.1",
 ]
 

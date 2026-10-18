@@ -300,6 +300,29 @@ def test_operational_gate_withholds_unpropagated_obstacle_geometry_bounds():
     assert "obstacle.shed-a.x_min_m" in " ".join(decision.reasons)
 
 
+def test_legacy_nonlocal_obstacle_routing_cannot_be_authorized_for_quantitative_use():
+    obstacle = AxisAlignedCuboid(1.5, 2.0, -0.2, 0.2, 0.0, 1.0, "skid-A")
+    screening = run_field_semi_fv_screening(
+        replace(_request(), obstacle=obstacle)
+    )
+    decision = evaluate_field_operational_screening(
+        screening,
+        require_refinement=False,
+        require_in_plane_sensor=False,
+        require_resolved_uncertainty=False,
+        allow_conditional=True,
+    )
+
+    assert screening.completed
+    assert screening.transport is not None
+    assert not screening.transport.diagnostics.quantitative_prediction_allowed
+    assert decision.status == "withheld"
+    assert not decision.screening_allowed
+    assert "quantitative_obstacle_prediction_prohibited" in decision.gate_codes
+    assert "non-local" in " ".join(decision.reasons)
+    assert "validated obstacle-resolved" in " ".join(decision.required_actions)
+
+
 def test_operational_gate_withholds_a_declared_cuboid_outside_the_local_plane():
     request = replace(
         _request(),
