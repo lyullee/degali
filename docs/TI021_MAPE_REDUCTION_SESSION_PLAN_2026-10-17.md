@@ -1396,3 +1396,21 @@ The closure remains available as an explicitly optional diagnostic, but none
 of these runs is promoted.  The best accepted-path evidence remains above the
 10% target; the next candidate must couple the near-field 3-D source/obstacle
 split to the outer core without violating the group and runtime gates.
+
+## 2026-10-18 named 3-D packet coupling checkpoint
+
+The existing named donor packet was coupled through the conservative interface
+at three downstream locations using the same 600 s replay and no sensor
+calibration.  Relative to the 26.15868% reference, the results were:
+
+| interface x | MAPE | runtime | decision |
+|---:|---:|---:|---|
+| 100 m | 44.3493% | 39.63 s | reject |
+| 160 m | 37.7435% | 52.54 s | reject |
+| 220 m | 35.1191% | 51.72 s | reject |
+
+The donor packet conserves its named mixture/species/horizontal-momentum
+ledger, but explicitly discards vertical impulse and sensible enthalpy and
+does not couple lateral/top exports.  It therefore cannot pass the full
+3-D handoff gate.  A wide-inner packet without the named donor schema was
+also rejected at load time rather than silently reused.
