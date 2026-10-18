@@ -247,6 +247,8 @@ def run(output,*,h=5.,dt=.25,source_dt=.025,layer_wind='neutral_log',
         wake_spread_slope=0.0,wake_recirculation_strength=0.0,
         wake_meander_strength=0.0,wake_shedding_strouhal=0.2,
         wake_meander_phase_deg=0.0,
+       core_meander_strength=0.0,core_meander_length_m=100.0,
+       core_meander_width_m=50.0,
         cavity_shelter_strength=0.0,
        cavity_entrainment_factor=1.0,
        cavity_core_entrainment_reduction=0.0,
@@ -882,6 +884,9 @@ def run(output,*,h=5.,dt=.25,source_dt=.025,layer_wind='neutral_log',
         wake_meander_strength=wake_meander_strength,
         wake_shedding_strouhal=wake_shedding_strouhal,
         wake_meander_phase_deg=wake_meander_phase_deg,
+        core_meander_strength=core_meander_strength,
+        core_meander_length_m=core_meander_length_m,
+        core_meander_width_m=core_meander_width_m,
         cavity_shelter_strength=cavity_shelter_strength,
         cavity_entrainment_factor=cavity_entrainment_factor,
         cavity_core_entrainment_reduction=cavity_core_entrainment_reduction,
@@ -1212,6 +1217,9 @@ def run(output,*,h=5.,dt=.25,source_dt=.025,layer_wind='neutral_log',
         'wake_meander_strength':float(wake_meander_strength),
         'wake_shedding_strouhal':float(wake_shedding_strouhal),
         'wake_meander_phase_deg':float(wake_meander_phase_deg),
+        'core_meander_strength':float(core_meander_strength),
+        'core_meander_length_m':float(core_meander_length_m),
+        'core_meander_width_m':float(core_meander_width_m),
         'cavity_shelter_strength':float(cavity_shelter_strength),
         'cavity_entrainment_factor':float(cavity_entrainment_factor),
         'cavity_core_entrainment_reduction':float(cavity_core_entrainment_reduction),
@@ -1471,6 +1479,9 @@ if __name__=='__main__':
     p.add_argument('--wake-meander-strength',type=float,default=0.0)
     p.add_argument('--wake-shedding-strouhal',type=float,default=0.2)
     p.add_argument('--wake-meander-phase-deg',type=float,default=0.0)
+    p.add_argument('--core-meander-strength',type=float,default=0.0)
+    p.add_argument('--core-meander-length-m',type=float,default=100.0)
+    p.add_argument('--core-meander-width-m',type=float,default=50.0)
     p.add_argument('--cavity-shelter-strength',type=float,default=0.0)
     p.add_argument('--cavity-core-entrainment-reduction',type=float,default=0.0)
     p.add_argument('--cavity-entrainment-factor',type=float,default=1.0)

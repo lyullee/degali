@@ -431,6 +431,9 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
                             wake_meander_strength=0.0,
                             wake_shedding_strouhal=0.2,
                             wake_meander_phase_deg=0.0,
+                            core_meander_strength=0.0,
+                            core_meander_length_m=100.0,
+                            core_meander_width_m=50.0,
                             cavity_shelter_strength=0.0,
                             cavity_entrainment_factor=1.0,
                             cavity_core_entrainment_reduction=0.0,
@@ -1065,6 +1068,9 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
                        (wake_recirculation_strength,'wake_recirculation_strength'),
                        (wake_meander_strength,'wake_meander_strength'),
                        (wake_shedding_strouhal,'wake_shedding_strouhal'),
+                       (core_meander_strength,'core_meander_strength'),
+                       (core_meander_length_m,'core_meander_length_m'),
+                       (core_meander_width_m,'core_meander_width_m'),
                        (cavity_shelter_strength,'cavity_shelter_strength'),
                        (cavity_backflow_rate_s_inv,'cavity_backflow_rate_s_inv'),
                        (cavity_stagnation_strength,'cavity_stagnation_strength'),
@@ -1100,6 +1106,8 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
         raise ValueError('wake strengths must be <=1')
     if wake_meander_strength>1:
         raise ValueError('wake_meander_strength must be <=1')
+    if core_meander_strength>1:
+        raise ValueError('core_meander_strength must be <=1')
     if not math.isfinite(wake_meander_phase_deg):
         raise ValueError('wake_meander_phase_deg must be finite')
     if cavity_shelter_strength>1:
@@ -3679,6 +3687,31 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
                 float(wake_meander_strength)*current_speed*envelope
                 *np.sin(shedding_phase))
             local_wind+=cross_direction[:,None,None]*lateral_speed[None,:,:]
+        if core_meander_strength>0.0:
+            # Obstacle-shed lateral momentum can persist across the dense
+            # core, not only inside the narrow recirculation envelope.  This
+            # is a bounded carrier-velocity closure; the conservative FV
+            # update still transports mixture, species and momentum together.
+            direction=wind/max(float(np.linalg.norm(wind)),1.e-30)
+            cross_direction=np.array([-direction[1],direction[0]])
+            xx,yy=np.meshgrid(x,y)
+            dx=xx-float(wake_center_xy_m[0])
+            dy=yy-float(wake_center_xy_m[1])
+            downstream=dx*direction[0]+dy*direction[1]-wake_radius_m
+            lateral=-dx*direction[1]+dy*direction[0]
+            envelope=np.exp(-np.maximum(downstream,0.0)
+                            /max(float(core_meander_length_m),1.e-30))
+            envelope*=np.exp(-0.5*(lateral/max(float(core_meander_width_m),1.e-30))**2)
+            envelope=np.where(downstream>0.0,envelope,0.0)
+            obstacle_diameter=max(2.0*float(wake_radius_m),1.e-30)
+            current_speed=abs(float(np.linalg.norm(wind)))
+            convected_distance=(current_speed*float(times[-1]+0.5*dt)-downstream)
+            shedding_phase=(2.0*math.pi*float(wake_shedding_strouhal)
+                            *convected_distance/obstacle_diameter
+                            +math.radians(float(wake_meander_phase_deg)))
+            local_wind+=cross_direction[:,None,None]*(
+                float(core_meander_strength)*current_speed*envelope
+                *np.sin(shedding_phase))[None,:,:]
         if cavity_backflow_strength > 0.0:
             # A separated recirculation bubble occupies the downstream half
             # of the fence cavity.  Blend a bounded reverse carrier there;
@@ -4769,6 +4802,9 @@ def solve_dense_layer_patch(*,initial_conserved,thermo:BinaryPuffThermodynamics,
             'wake_meander_strength':float(wake_meander_strength),
             'wake_shedding_strouhal':float(wake_shedding_strouhal),
             'wake_meander_phase_deg':float(wake_meander_phase_deg),
+            'core_meander_strength':float(core_meander_strength),
+            'core_meander_length_m':float(core_meander_length_m),
+            'core_meander_width_m':float(core_meander_width_m),
             'cavity_shelter_strength':float(cavity_shelter_strength),
             'cavity_entrainment_factor':float(cavity_entrainment_factor),
             'cavity_core_entrainment_reduction':float(cavity_core_entrainment_reduction),

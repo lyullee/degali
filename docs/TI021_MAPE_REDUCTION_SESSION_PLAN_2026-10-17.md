@@ -1376,3 +1376,23 @@ These complete-event tests further narrow the missing mechanism to a coupled
 near-field 3-D source/obstacle split and spatially varying core transport.
 No candidate in this checkpoint uses sensor-specific gains, and none is
 promoted unless the conservation, group, runtime and 10% gates all pass.
+
+## 2026-10-18 conservative core-meander closure
+
+A new optional carrier closure was implemented for obstacle-shed lateral
+momentum across the dense core (`core_meander_strength`,
+`core_meander_length_m`, `core_meander_width_m`).  It changes only the
+carrier velocity; mixture, species and momentum still advance through the
+same conservative FV fluxes.
+
+- Strength 0.10, length 150 m, width 50 m: **26.15233%**, 28.87 s;
+  species conservation passed, but the 6.4 m and far-distance groups
+  degraded.
+- Strength 0.05 with the same geometry: **26.14946%**, 33.65 s; the runtime
+  gate failed and the 6.4 m group still degraded.
+- Strength 0.10 with 180 degree phase: **26.18378%**, 28.91 s; rejected.
+
+The closure remains available as an explicitly optional diagnostic, but none
+of these runs is promoted.  The best accepted-path evidence remains above the
+10% target; the next candidate must couple the near-field 3-D source/obstacle
+split to the outer core without violating the group and runtime gates.
