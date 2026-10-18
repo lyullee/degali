@@ -24,6 +24,19 @@ GitHub 공개 저장소에 고정한 기록이다. 실행 산출물 전체를 �
 - wide-inner packet의 임의 schema 변환: 50.4307% 및 56.2863%로 악화되어 거절
 - 최신 전체 테스트: **2,430 passed, 145 skipped**
 
+## 최신 3-D nested 경로 감사
+
+보존형 wide-inner 3-D 경로를 별도로 점검한 결과, 보존성은 통과하지만 센서
+dose를 크게 과소예측했다. inner-only 양의 관측 dose MAPE는 **85.5286%**,
+예측/관측 총 dose 비율은 약 **0.1033**이며, 기존 nested score MAPE는
+**84.9011%**였다. 이는 10% 목표 후보가 아니므로 승격하지 않았다.
+
+현재 우선순위는 짧은 동일 조건에서 `cell_center` 대 `ground_linear` 수직
+관측 연산자와 finite-source release 설정을 비교한 뒤, 개선 방향이 확인될
+때만 600 s 전체 재계산을 수행하는 것이다. 상세 감사는
+[`TI021_3D_UNDERPREDICTION_AUDIT_2026-10-18.md`](TI021_3D_UNDERPREDICTION_AUDIT_2026-10-18.md)
+에 기록했다.
+
 ## 해석 및 사용 범위
 
 현재 공개본은 연구용 시나리오 비교와 물리 모델 민감도 분석에 사용할 수 있다.
