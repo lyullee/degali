@@ -33,7 +33,8 @@ GitHub 공개 저장소에 고정한 기록이다. 실행 산출물 전체를 �
   **31.45541%**로 악화되어, 단순 원거리 희석이 주된 잔차 원인이 아님을 확인했다.
 - 600 s 3-D `ground_linear` 전체 실행 및 nested 145-sensor score도 완료했다.
   MAPE는 **84.45845%**, normalized bias는 **−0.88678**이었고, 보존성은 통과했지만
-  overlap coupling gate가 실패하여 승격하지 않았다. 상세 결과는
+  overlap coupling gate가 실패하여 승격하지 않았다. 실행시간은 약 **3044.64 s**였고,
+  상세 결과는
   [`TI021_GROUND_LINEAR_3D_SCORE_2026-10-19.md`](TI021_GROUND_LINEAR_3D_SCORE_2026-10-19.md)에
   기록했다.
 - 후속 600 s 물리 후보도 기록했다: 수직 diffusive-tail 확산계수 `0.20 m²/s`
@@ -50,10 +51,9 @@ dose를 크게 과소예측했다. inner-only 양의 관측 dose MAPE는 **85.52
 예측/관측 총 dose 비율은 약 **0.1033**이며, 기존 nested score MAPE는
 **84.9011%**였다. 이는 10% 목표 후보가 아니므로 승격하지 않았다.
 
-현재 우선순위는 동일 조건의 `ground_linear` 600 s 전체 재계산을 완료한 뒤
-외부 센서 score를 재계산하고, 개선되지 않으면 해당 후보를 거절하는 것이다.
-현재 실행은 `outputs/thorney-ti021-inner-600s-groundlinear-2026-10-18/`에
-체크포인트를 기록 중이며, 완료 전에는 결과를 승격하지 않는다. 상세 감사는
+후속 우선순위는 handoff HDF5의 양의 species flux 적분(약 **3292.60 kg**)과
+workbook 질량 proxy(4962 kg)의 차이를 짧은 보존성 진단으로 분해하는 것이다.
+현재 실행은 완료되었으며 결과는 승격하지 않았다. 상세 감사는
 [`TI021_3D_UNDERPREDICTION_AUDIT_2026-10-18.md`](TI021_3D_UNDERPREDICTION_AUDIT_2026-10-18.md)
 에 기록했다.
 
