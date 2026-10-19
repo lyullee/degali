@@ -31,6 +31,11 @@ GitHub 공개 저장소에 고정한 기록이다. 실행 산출물 전체를 �
   기준보다 악화되어 거절했다. 보존성은 동일하게 통과했다.
 - 외부 원거리 entrainment을 제거한 후보(`exterior_entrainment_far_factor=0`)는
   **31.45541%**로 악화되어, 단순 원거리 희석이 주된 잔차 원인이 아님을 확인했다.
+- 600 s 3-D `ground_linear` 전체 실행 및 nested 145-sensor score도 완료했다.
+  MAPE는 **84.45845%**, normalized bias는 **−0.88678**이었고, 보존성은 통과했지만
+  overlap coupling gate가 실패하여 승격하지 않았다. 상세 결과는
+  [`TI021_GROUND_LINEAR_3D_SCORE_2026-10-19.md`](TI021_GROUND_LINEAR_3D_SCORE_2026-10-19.md)에
+  기록했다.
 - 후속 600 s 물리 후보도 기록했다: 수직 diffusive-tail 확산계수 `0.20 m²/s`
   는 **30.98524%**, geometry-only 후류 상부분기(`wake_vertical_elevated_fraction=0.10`)
   는 **26.26299%**로 기준보다 악화되어 모두 거절했다. 두 후보 모두
