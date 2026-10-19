@@ -55,6 +55,12 @@ def main() -> int:
             "wall_impulse_reattached_fraction": 0.50,
             "wall_impulse_wake_capture_rate_s_inv": 0.025,
         },
+        "reattach040-wake025-elevated020": {
+            "wall_impulse_reattached_fraction": 0.40,
+            "wall_impulse_wake_capture_rate_s_inv": 0.025,
+            "wall_impulse_elevated_transport_fraction": 0.20,
+            "wall_impulse_elevated_advection_duration_s": 60.0,
+        },
     }
     summary = []
     for name, changes in trials.items():

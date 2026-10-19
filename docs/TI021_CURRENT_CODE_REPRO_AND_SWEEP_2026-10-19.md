@@ -25,6 +25,11 @@
 | 재부착 0.50 + wake capture 0.025 s⁻¹ | 25.89101% | `3.47e-15` | pass |
 | 재부착 0.50 + wake capture 0.020 s⁻¹ | 25.92528% | `4.75e-15` | pass |
 
+상단 이송 branch를 결합한 후속 600 s 재계산에서는
+`wall_impulse_elevated_transport_fraction=0.20`이 **25.79593%**로 더 낮았다.
+species residual은 `4.02e-15`, momentum gate는 pass였다. 횡방향 속도·중심
+위치 변경은 각각 25.91228%, 26.31736%로 악화되어 채택하지 않았다.
+
 최선 후보는 현재 checkout 기준의 새 최선이지만 10% 목표는 아직 미달성이다.
 이 sweep은 장애물 후면 재순환과 재부착 체류라는 전역 물리를 변경했으며,
 센서별 gain을 적용하지 않았다.
