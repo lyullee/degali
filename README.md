@@ -12,16 +12,9 @@ dense-gas dispersion model and extended for cryogenic hydrogen releases.
 > scenario comparison and sensitivity studies, but are not independently
 > certified for regulatory separation distances or safety-critical design.
 
-한국어 요약: 현재 공개본은 원본 DEGADIS 재현 경로와 액화수소 연구 확장을
-함께 제공합니다. PRESLHY 수평 야외제트 범위에서 정량 비교를 마쳤지만,
-미완성 TKE/압력/열폭 폐쇄와 제한된 독립 검증 때문에 설비 인허가 판단의
-단독 근거로 사용하면 안 됩니다. 자세한 판정은
-[1차 결과](docs/stage1-results-2026-09-06.md)를 참고하십시오.
+The public release includes the original DEGADIS reproduction route and an LH2 research extension. Quantitative comparisons cover the PRESLHY horizontal outdoor-jet domain; incomplete TKE/pressure/thermal-width closures and limited independent validation prevent its use as the sole basis for facility permitting. See the [Stage 1 results](docs/stage1-results-2026-09-06.md) for the detailed assessment.
 
-처음 설치하거나 실제 계산을 시작하려면 상세 사용 가이드를 참고하십시오:
-**[한국어](USER_GUIDE_KO.md) · [English](USER_GUIDE.md)**. LH₂ 간편
-평가, 결과 해석, CSV 저장, 민감도 분석, 기존 DEGADIS 입력 덱과 CLI 사용법을
-단계별로 설명합니다.
+For installation and a first calculation, use the **[English user guide](USER_GUIDE.md)**. A [Korean translation](USER_GUIDE_KO.md) is also available. The guides cover simplified LH2 evaluation, result interpretation, CSV exports, sensitivity analysis, existing DEGADIS input decks, and CLI usage.
 
 ## What is included
 
@@ -1009,7 +1002,7 @@ a time. Input decks and licensed third-party data are not bundled.
 For complete installation, input, output, plotting, parameter-study, deck,
 validation-range, and troubleshooting instructions, see the root-level
 **[English user guide](USER_GUIDE.md)** or
-**[한국어 사용자 가이드](USER_GUIDE_KO.md)**.
+**[Korean user guide](USER_GUIDE_KO.md)**.
 
 ## Verification
 
